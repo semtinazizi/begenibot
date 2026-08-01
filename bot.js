@@ -167,27 +167,39 @@ async function guvenliGit(page, url, girisYapFn, browser, deneme = 1) {
 // loginPage: Tor OLMAYAN sayfada giris yapilir (Tor girisi engelleyebilir)
 async function girisYap(loginPage) {
     log('Giris sayfasina gidiliyor...');
-    await loginPage.goto('https://1000kitap.com/giris', { waitUntil: 'networkidle2', timeout: 60000 });
 
-    // Sayfa ekran goruntusu al (debug icin)
+    // Once DOM yukle, sonra JS renderini bekle
+    await loginPage.goto('https://1000kitap.com/giris', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await bekle(4000); // JS render icin ek bekleme
+
+    // Debug: sayfa basligini ve URL'yi logla
+    const baslik = await loginPage.title().catch(() => '?');
+    log('Sayfa: ' + baslik + ' | URL: ' + loginPage.url());
+
+    // Debug: sayfadaki tum input elementlerini logla
+    const inputBilgi = await loginPage.evaluate(() => {
+        return Array.from(document.querySelectorAll('input')).map(el => ({
+            type: el.type, name: el.name, id: el.id,
+            placeholder: el.placeholder, autocomplete: el.autocomplete
+        }));
+    }).catch(() => []);
+    log('Inputlar: ' + JSON.stringify(inputBilgi));
+
+    // Ekran goruntusu al
     await loginPage.screenshot({ path: 'giris-oncesi.png' }).catch(() => {});
-    log('Giris sayfasi yuklendi, form aranıyor...');
 
-    // Daha genis selector listesi - sitenin farkli input yapılarını kapsar
-    const emailSelector = [
-        'input[type="email"]',
-        'input[name="email"]',
-        'input[name="username"]',
-        'input[placeholder*="mail"]',
-        'input[placeholder*="Mail"]',
-        'input[autocomplete="email"]',
-        'input[autocomplete="username"]',
-    ].join(', ');
+    // Genis fallback - herhangi bir email/text tipi input
+    const emailInput = await loginPage.$('input[type="email"]')
+        || await loginPage.$('input[name="email"]')
+        || await loginPage.$('input[name="username"]')
+        || await loginPage.$('input[placeholder*="mail"]')
+        || await loginPage.$('input[placeholder*="Mail"]')
+        || await loginPage.$('input[autocomplete="email"]')
+        || await loginPage.$('input[autocomplete="username"]')
+        || await loginPage.$('input[type="text"]');
 
-    await loginPage.waitForSelector(emailSelector, { timeout: 30000 });
+    if (!emailInput) throw new Error('Hicbir email/text input bulunamadi! Sayfa yapisi degismis olabilir.');
 
-    const emailInput = await loginPage.$(emailSelector);
-    if (!emailInput) throw new Error('E-posta alani bulunamadi!');
 
     await emailInput.click({ clickCount: 3 });
     await emailInput.type(EMAIL, { delay: rastgeleSayi(80, 150) });
