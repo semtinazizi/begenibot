@@ -168,9 +168,15 @@ async function guvenliGit(page, url, girisYapFn, browser, deneme = 1) {
 async function girisYap(loginPage) {
     log('Giris sayfasina gidiliyor...');
 
-    // Once DOM yukle, sonra JS renderini bekle
-    await loginPage.goto('https://1000kitap.com/giris', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await bekle(4000); // JS render icin ek bekleme
+    // networkidle2: sayfa tamamen yuklenip JS render tamamlaninca devam et
+    await loginPage.goto('https://1000kitap.com/giris', { waitUntil: 'networkidle2', timeout: 60000 });
+
+    // SPA icin kritik: herhangi bir input gorunene kadar bekle (max 30sn)
+    // React/Next.js gibi frameworkler formu gecikmeyle render eder
+    log('Input bekleniyor (SPA render icin)...');
+    await loginPage.waitForSelector('input', { timeout: 30000 }).catch(() => {
+        log('30sn icinde hic input bulunamadi, devam ediliyor...');
+    });
 
     // Debug: sayfa basligini ve URL'yi logla
     const baslik = await loginPage.title().catch(() => '?');
