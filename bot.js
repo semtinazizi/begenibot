@@ -164,35 +164,52 @@ async function guvenliGit(page, url, girisYapFn, browser, deneme = 1) {
 }
 
 // --- GİRİŞ YAPMA ---
-async function girisYap(page) {
+// loginPage: Tor OLMAYAN sayfada giris yapilir (Tor girisi engelleyebilir)
+async function girisYap(loginPage) {
     log('Giris sayfasina gidiliyor...');
-    await page.goto('https://1000kitap.com/giris', { waitUntil: 'networkidle2', timeout: 30000 });
+    await loginPage.goto('https://1000kitap.com/giris', { waitUntil: 'networkidle2', timeout: 60000 });
 
-    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 15000 });
-    const emailInput = await page.$('input[type="email"]') || await page.$('input[name="email"]');
+    // Sayfa ekran goruntusu al (debug icin)
+    await loginPage.screenshot({ path: 'giris-oncesi.png' }).catch(() => {});
+    log('Giris sayfasi yuklendi, form aranıyor...');
+
+    // Daha genis selector listesi - sitenin farkli input yapılarını kapsar
+    const emailSelector = [
+        'input[type="email"]',
+        'input[name="email"]',
+        'input[name="username"]',
+        'input[placeholder*="mail"]',
+        'input[placeholder*="Mail"]',
+        'input[autocomplete="email"]',
+        'input[autocomplete="username"]',
+    ].join(', ');
+
+    await loginPage.waitForSelector(emailSelector, { timeout: 30000 });
+
+    const emailInput = await loginPage.$(emailSelector);
     if (!emailInput) throw new Error('E-posta alani bulunamadi!');
 
     await emailInput.click({ clickCount: 3 });
     await emailInput.type(EMAIL, { delay: rastgeleSayi(80, 150) });
 
-    const sifreInput = await page.$('input[type="password"]');
+    const sifreInput = await loginPage.$('input[type="password"]');
     if (!sifreInput) throw new Error('Sifre alani bulunamadi!');
 
     await sifreInput.click({ clickCount: 3 });
     await sifreInput.type(SIFRE, { delay: rastgeleSayi(80, 150) });
 
-    const girisButon = await page.$('button[type="submit"]') || await page.$('input[type="submit"]');
+    const girisButon = await loginPage.$('button[type="submit"]') || await loginPage.$('input[type="submit"]');
     if (!girisButon) throw new Error('Giris butonu bulunamadi!');
 
     await bekle(rastgeleSayi(500, 1200));
     await girisButon.click();
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 });
+    await loginPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
 
-    if (page.url().includes('/giris')) {
+    if (loginPage.url().includes('/giris')) {
         throw new Error('Giris basarisiz! Kullanici adi veya sifre hatali olabilir.');
     }
 
-    log('Giris basarili!');
+    log('Giris basarili! URL: ' + loginPage.url());
     await bekle(rastgeleSayi(1500, 3000));
 }
 
@@ -400,7 +417,50 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
     });
 
     try {
-        await girisYap(page);
+        // --- GİRİŞ STRATEJİSİ ---
+        // Tor tum tarayiciya atandiginda giris sayfasi da Tor'dan geciyor ve
+        // yavas/engelli aciliyor. Cozum:
+        //   1. Tor'suz ayri bir tarayici ile giris yap ve cookie al
+        //   2. Cookie'yi Tor'lu sayfaya aktar
+        //   3. Tor'suz tarayiciyi kapat
+
+        if (USE_TOR) {
+            log('[GIRIS] Tor aktif - giris Tor olmadan yapilacak, sonra cookie aktarilacak...');
+
+            // Tor'suz gecici tarayici
+            const loginBrowser = await puppeteer.launch({
+                headless: 'new',
+                args: [
+                    '--no-sandbox', '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage', '--disable-gpu',
+                    '--disable-blink-features=AutomationControlled',
+                ],
+            });
+            const loginPage = await loginBrowser.newPage();
+            await loginPage.setUserAgent(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            );
+            await loginPage.evaluateOnNewDocument(() => {
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            });
+
+            // Giris yap
+            await girisYap(loginPage);
+
+            // Cookie'leri al
+            const cookies = await loginPage.cookies();
+            log('[GIRIS] ' + cookies.length + ' cookie alindi, Tor sayfasina aktariliyor...');
+
+            // Cookie'leri Tor'lu sayfaya aktar
+            await page.setCookie(...cookies);
+
+            // Giris tarayicisini kapat
+            await loginBrowser.close();
+            log('[GIRIS] Giris tamamlandi. Artık Tor uzerinden devam ediliyor.');
+        } else {
+            // Tor yoksa direkt giris yap
+            await girisYap(page);
+        }
 
         let genelToplam = 0;   // Gunde yapilan toplam begeni
         let tur         = 1;   // Kacinci tam tur oldugu (akis'ten siir-yeni'ye)
