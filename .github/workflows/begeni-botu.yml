@@ -1,0 +1,78 @@
+name: 1000kitap Otomatik Begeni Botu
+
+on:
+  # Sabah 07:00 Turkiye saati (UTC 04:00) → 3750 begeni
+  # Aksam 18:00 Turkiye saati (UTC 15:00) → 3750 begeni
+  # Gunluk toplam: 3750 + 3750 = 7500 begeni
+  schedule:
+    - cron: '0 4 * * *'   # Sabah 07:00 TR
+    - cron: '0 15 * * *'  # Aksam 18:00 TR
+
+  workflow_dispatch:
+    inputs:
+      gunluk_limit:
+        description: 'Bu calisma icin begeni limiti (varsayilan: 3750)'
+        required: false
+        default: '3750'
+      tor_kullan:
+        description: 'Tor ile IP gizle?'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+jobs:
+  begeni-botu:
+    name: 'Begeni Botu'
+    runs-on: ubuntu-latest
+    # Her calisma en fazla 3750 begeni yapar → ~2.5-3 saat
+    # 5 saatlik timeout bu icin fazlasiyla yeterli
+    timeout-minutes: 300
+
+    steps:
+      - name: Kaynak kodu indir
+        uses: actions/checkout@v4
+
+      - name: Node.js kur (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Bagimliliklari yukle
+        run: npm ci
+
+      - name: Chromium + Tor sistem bagimliliklari
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            tor \
+            libgbm-dev libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
+            libpangocairo-1.0-0 libpango-1.0-0 libcairo2
+
+      - name: Tor'u yapilandir ve baslat
+        run: |
+          echo "ControlPort 9051"        | sudo tee -a /etc/tor/torrc
+          echo "CookieAuthentication 0"  | sudo tee -a /etc/tor/torrc
+          sudo service tor restart
+          sleep 20
+          echo "--- Tor durumu ---"
+          sudo service tor status || true
+
+      - name: Botu calistir
+        env:
+          KITAP_EMAIL:  ${{ secrets.KITAP_EMAIL }}
+          KITAP_SIFRE:  ${{ secrets.KITAP_SIFRE }}
+          GUNLUK_LIMIT: ${{ github.event.inputs.gunluk_limit || '3750' }}
+          USE_TOR:      ${{ github.event.inputs.tor_kullan || 'true' }}
+        run: node bot.js
+
+      - name: Hata ekran goruntusunu yukle (sadece hata durumunda)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hata-ekran-goruntusu
+          path: hata-ekran.png
+          retention-days: 3
