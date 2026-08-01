@@ -292,22 +292,22 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
             }
         }
 
-        const butonlar = await page.evaluate((svgPath) => {
+        // Ekranda gozuken butonu bul, kaydir ve tikla
+        const tiklandi = await page.evaluate((svgPath) => {
             const pathElements = document.querySelectorAll('path[d="' + svgPath + '"]');
-            const sonuclar = [];
-            pathElements.forEach((path) => {
-                const btn = path.closest('button');
-                if (btn && btn.offsetParent !== null) {
-                    const rect = btn.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        sonuclar.push({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-                    }
+            for (let i = 0; i < pathElements.length; i++) {
+                const btn = pathElements[i].closest('button');
+                if (btn && btn.offsetParent !== null && !btn.dataset.botdenendi) {
+                    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    btn.dataset.botdenendi = 'true'; // Ayni butona tekrar tekrar tiklamamak icin
+                    btn.click();
+                    return true;
                 }
-            });
-            return sonuclar;
+            }
+            return false;
         }, KALP_SVG_PATH);
 
-        if (butonlar.length === 0) {
+        if (!tiklandi) {
             const kaydirmaMiktari = rastgeleSayi(KAYDIR_MIN, KAYDIR_MAX);
             await page.evaluate((miktar) => window.scrollBy({ top: miktar, behavior: 'smooth' }), kaydirmaMiktari);
             log('Asagi kaydirildi (' + kaydirmaMiktari + 'px) - icerik yok.');
@@ -333,60 +333,29 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
             continue;
         }
 
+        // Tiklama basarili
         bosKaydirmaSayisi = 0;
         arkaArkayaHata    = 0;
+        toplamBegeni++;
 
-        for (const buton of butonlar) {
-            try {
-                await page.mouse.click(buton.x, buton.y);
-                toplamBegeni++;
-                arkaArkayaHata = 0;
-                log('Begeni yapildi! (Bu sayfada: ' + toplamBegeni + ' | Kalan limit: ' + (kalanLimit - toplamBegeni) + ')');
+        log('Begeni yapildi! (Bu sayfada: ' + toplamBegeni + ' | Kalan limit: ' + (kalanLimit - toplamBegeni) + ')');
 
-                // Sayfa icinde de limit kontrolu
-                if (toplamBegeni >= kalanLimit) {
-                    log('[LIMIT] Gunluk limite ulasildi, duruluyor!');
-                    break;
-                }
-
-                let bekleme = rastgeleSayi(GECIKME_MIN, GECIKME_MAX);
-
-                if (toplamBegeni % molaHedefi === 0) {
-                    const uzunMola = rastgeleSayi(UZUN_MOLA_MIN, UZUN_MOLA_MAX);
-                    bekleme += uzunMola;
-                    molaHedefi = rastgeleSayi(MOLA_HEDEF_MIN, MOLA_HEDEF_MAX);
-                    log('Insan molasi: ' + (uzunMola / 1000).toFixed(1) + ' sn bekleniyor...');
-                }
-
-                await bekle(bekleme);
-            } catch (hata) {
-                arkaArkayaHata++;
-                log('[HATA] Begeni sirasinda hata (' + arkaArkayaHata + '): ' + hata.message);
-
-                // 5 arka arkaya hata = baglanti sorunu, Tor ile IP degistir ve sayfayi yenile
-                if (arkaArkayaHata >= 5) {
-                    if (USE_TOR && torYenileme < MAX_TOR_YENILEME) {
-                        log('[TOR] Arka arkaya 5 hata - yeni IP alip sayfa yenileniyor...');
-                        torYenileme++;
-                        await torYeniIP();
-                        try {
-                            await guvenliGit(page, sayfaUrl, girisYap, browser);
-                            await bekle(rastgeleSayi(2000, 4000));
-                            bosKaydirmaSayisi = 0;
-                            arkaArkayaHata    = 0;
-                            log('[TOR] Sayfa yenilendi, devam ediliyor...');
-                        } catch (_) {
-                            log('[ATLANDI] Yenileme basarisiz, sonraki sayfaya geciliyor.');
-                            bosKaydirmaSayisi = MAX_BOS_KAYDIRMA;
-                        }
-                    } else {
-                        log('[ATLANDI] Tor siniri doldu/aktif degil, sayfa atlaniyor.');
-                        bosKaydirmaSayisi = MAX_BOS_KAYDIRMA;
-                    }
-                    break;
-                }
-            }
+        // Sayfa icinde de limit kontrolu
+        if (toplamBegeni >= kalanLimit) {
+            log('[LIMIT] Gunluk limite ulasildi, duruluyor!');
+            break;
         }
+
+        let bekleme = rastgeleSayi(GECIKME_MIN, GECIKME_MAX);
+
+        if (toplamBegeni % molaHedefi === 0) {
+            const uzunMola = rastgeleSayi(UZUN_MOLA_MIN, UZUN_MOLA_MAX);
+            bekleme += uzunMola;
+            molaHedefi = rastgeleSayi(MOLA_HEDEF_MIN, MOLA_HEDEF_MAX);
+            log('Insan molasi: ' + (uzunMola / 1000).toFixed(1) + ' sn bekleniyor...');
+        }
+
+        await bekle(bekleme);
 
         const kaydirmaMiktari = rastgeleSayi(KAYDIR_MIN, KAYDIR_MAX);
         await page.evaluate((miktar) => window.scrollBy({ top: miktar, behavior: 'smooth' }), kaydirmaMiktari);
@@ -428,6 +397,15 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
 
     const browser = await puppeteer.launch({ headless: 'new', args: launchArgs });
     const page    = await browser.newPage();
+
+    // API Hatalarini aninda yakala (ornek: 401 Unauthorized, 429 Too Many Requests)
+    page.on('response', response => {
+        const url = response.url();
+        const status = response.status();
+        if (url.includes('/api/') && status >= 400) {
+            log(`[API HATA] Istek basarisiz: ${url} (Durum: ${status})`);
+        }
+    });
 
     await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
