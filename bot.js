@@ -437,51 +437,41 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
         Object.defineProperty(navigator, 'webdriver',  { get: () => undefined });
         Object.defineProperty(navigator, 'languages',  { get: () => ['tr-TR', 'tr', 'en-US', 'en'] });
         Object.defineProperty(navigator, 'platform',   { get: () => 'Win32' });
-    });
+           // --- GİRİŞ STRATEJİSİ ---
+        // GitHub Actions veri merkezi IP'si Cloudflare tarafindan engelleniyor.
+        // Cozum: kullanicinin gercek tarayicindan alinan cerezler kullanilir.
+        // KITAP_COOKIES: tarayici konsolundan kopyalanan document.cookie degeri
 
-    try {
-        // --- GİRİŞ STRATEJİSİ ---
-        // Tor tum tarayiciya atandiginda giris sayfasi da Tor'dan geciyor ve
-        // yavas/engelli aciliyor. Cozum:
-        //   1. Tor'suz ayri bir tarayici ile giris yap ve cookie al
-        //   2. Cookie'yi Tor'lu sayfaya aktar
-        //   3. Tor'suz tarayiciyi kapat
+        const KITAP_COOKIES = process.env.KITAP_COOKIES || '';
 
-        if (USE_TOR) {
-            log('[GIRIS] Tor aktif - giris Tor olmadan yapilacak, sonra cookie aktarilacak...');
+        if (KITAP_COOKIES) {
+            log('[GIRIS] Cerez tabanli giris yapiliyor...');
 
-            // Stealth modlu gecici tarayici (bot tespiti icin)
-            const loginBrowser = await puppeteerExtra.launch({
-                headless: 'new',
-                args: [
-                    '--no-sandbox', '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage', '--disable-gpu',
-                    '--disable-blink-features=AutomationControlled',
-                ],
-            });
-            const loginPage = await loginBrowser.newPage();
-            await loginPage.setUserAgent(
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-            );
-            await loginPage.evaluateOnNewDocument(() => {
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            });
+            // "key=value; key2=value2" formatindaki cookie string'ini ayristir
+            const cookieList = KITAP_COOKIES.split(';').map(c => {
+                const [name, ...rest] = c.trim().split('=');
+                return {
+                    name: name.trim(),
+                    value: rest.join('=').trim(),
+                    domain: '1000kitap.com',
+                    path: '/',
+                };
+            }).filter(c => c.name && c.value);
 
-            // Giris yap
-            await girisYap(loginPage);
+            await page.setCookie(...cookieList);
+            log('[GIRIS] ' + cookieList.length + ' cerez yuklendi.');
 
-            // Cookie'leri al
-            const cookies = await loginPage.cookies();
-            log('[GIRIS] ' + cookies.length + ' cookie alindi, Tor sayfasina aktariliyor...');
+            // Giris kontrolu: akis sayfasini ac ve oturum acik mi diye bak
+            await page.goto('https://1000kitap.com/akis', { waitUntil: 'networkidle2', timeout: 60000 });
+            const sonUrl = page.url();
+            if (sonUrl.includes('/giris') || sonUrl.includes('/login')) {
+                throw new Error('Cerezler gecersiz veya suresi dolmus! KITAP_COOKIES secretini guncelleyin.');
+            }
+            log('[GIRIS] Oturum dogrulandi! URL: ' + sonUrl);
 
-            // Cookie'leri Tor'lu sayfaya aktar
-            await page.setCookie(...cookies);
-
-            // Giris tarayicisini kapat
-            await loginBrowser.close();
-            log('[GIRIS] Giris tamamlandi. Artık Tor uzerinden devam ediliyor.');
         } else {
-            // Tor yoksa direkt giris yap
+            // KITAP_COOKIES yoksa normal giris dene (yerel test icin)
+            log('[GIRIS] KITAP_COOKIES bulunamadi, normal giris deneniyor...');
             await girisYap(page);
         }
 

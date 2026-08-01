@@ -62,10 +62,11 @@ jobs:
 
       - name: Botu calistir
         env:
-          KITAP_EMAIL:  ${{ secrets.KITAP_EMAIL }}
-          KITAP_SIFRE:  ${{ secrets.KITAP_SIFRE }}
-          GUNLUK_LIMIT: ${{ github.event.inputs.gunluk_limit || '3750' }}
-          USE_TOR:      ${{ github.event.inputs.tor_kullan || 'true' }}
+          KITAP_EMAIL:   ${{ secrets.KITAP_EMAIL }}
+          KITAP_SIFRE:   ${{ secrets.KITAP_SIFRE }}
+          KITAP_COOKIES: ${{ secrets.KITAP_COOKIES }}
+          GUNLUK_LIMIT:  ${{ github.event.inputs.gunluk_limit || '3750' }}
+          USE_TOR:       ${{ github.event.inputs.tor_kullan || 'true' }}
         run: node bot.js
 
       - name: Hata ekran goruntusunu yukle (sadece hata durumunda)
