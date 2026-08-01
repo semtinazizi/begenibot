@@ -2,8 +2,13 @@
 // GitHub Actions uzerinde calismak uzere tasarlanmistir.
 // v3: Gunluk limit + sayfa dongusu eklendi.
 
-const puppeteer = require('puppeteer');
-const net       = require('net');
+const puppeteer      = require('puppeteer');
+const puppeteerExtra = require('puppeteer-extra');
+const StealthPlugin  = require('puppeteer-extra-plugin-stealth');
+const net            = require('net');
+
+// Stealth plugin: headless Chrome tespitini engeller
+puppeteerExtra.use(StealthPlugin());
 
 // --- AYARLAR ---
 const EMAIL         = process.env.KITAP_EMAIL;
@@ -445,8 +450,8 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
         if (USE_TOR) {
             log('[GIRIS] Tor aktif - giris Tor olmadan yapilacak, sonra cookie aktarilacak...');
 
-            // Tor'suz gecici tarayici
-            const loginBrowser = await puppeteer.launch({
+            // Stealth modlu gecici tarayici (bot tespiti icin)
+            const loginBrowser = await puppeteerExtra.launch({
                 headless: 'new',
                 args: [
                     '--no-sandbox', '--disable-setuid-sandbox',
