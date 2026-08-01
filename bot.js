@@ -437,7 +437,10 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
         Object.defineProperty(navigator, 'webdriver',  { get: () => undefined });
         Object.defineProperty(navigator, 'languages',  { get: () => ['tr-TR', 'tr', 'en-US', 'en'] });
         Object.defineProperty(navigator, 'platform',   { get: () => 'Win32' });
-           // --- GİRİŞ STRATEJİSİ ---
+    });
+
+    try {
+        // --- GİRİŞ STRATEJİSİ ---
         // GitHub Actions veri merkezi IP'si Cloudflare tarafindan engelleniyor.
         // Cozum: kullanicinin gercek tarayicindan alinan cerezler kullanilir.
         // KITAP_COOKIES: tarayici konsolundan kopyalanan document.cookie degeri
