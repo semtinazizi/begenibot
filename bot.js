@@ -443,7 +443,25 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
             log('[GIRIS] ' + cookieList.length + ' cerez yuklendi.');
 
             // Giris kontrolu: akis sayfasini ac ve oturum acik mi diye bak
-            await page.goto('https://1000kitap.com/akis', { waitUntil: 'networkidle2', timeout: 60000 });
+            let basarili = false;
+            for (let i = 0; i < 3; i++) {
+                try {
+                    await page.goto('https://1000kitap.com/akis', { waitUntil: 'networkidle2', timeout: 60000 });
+                    basarili = true;
+                    break;
+                } catch (err) {
+                    log(`[GIRIS] Cookie kontrolu sirasinda hata (Deneme ${i+1}/3): ${err.message}`);
+                    if (USE_TOR && i < 2) {
+                        log('[TOR] Yeni IP aliniyor...');
+                        await torYeniIP();
+                    }
+                }
+            }
+
+            if (!basarili) {
+                throw new Error('Cerez kontrolu sirasinda 1000kitap.com a baglanilamadi.');
+            }
+
             const sonUrl = page.url();
             if (sonUrl.includes('/giris') || sonUrl.includes('/login')) {
                 throw new Error('Cerezler gecersiz veya suresi dolmus! KITAP_COOKIES secretini guncelleyin.');
