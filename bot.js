@@ -41,7 +41,7 @@ const GECIKME_MIN      = 800;
 const GECIKME_MAX      = 2500;
 const KAYDIR_MIN       = 600;
 const KAYDIR_MAX       = 1000;
-const MAX_BOS_KAYDIRMA = 5;
+const MAX_BOS_KAYDIRMA = 8;
 const MOLA_HEDEF_MIN   = 5;
 const MOLA_HEDEF_MAX   = 12;
 const UZUN_MOLA_MIN    = 4000;
@@ -329,7 +329,8 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
                 }
             }
 
-            await bekle(rastgeleSayi(1500, 2500));
+            // Tor ile sayfa yuklenmesi yavas olabileceginden, kaydirdiktan sonra biraz daha uzun bekle
+            await bekle(rastgeleSayi(3000, 5000));
             continue;
         }
 
