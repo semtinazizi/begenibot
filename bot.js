@@ -308,9 +308,10 @@ async function sayfadaBegeniYap(page, sayfaUrl, browser, kalanLimit) {
         }, KALP_SVG_PATH);
 
         if (!tiklandi) {
-            const kaydirmaMiktari = rastgeleSayi(KAYDIR_MIN, KAYDIR_MAX);
-            await page.evaluate((miktar) => window.scrollBy({ top: miktar, behavior: 'smooth' }), kaydirmaMiktari);
-            log('Asagi kaydirildi (' + kaydirmaMiktari + 'px) - icerik yok.');
+            // Eger tiklanacak buton kalmadiysa (hepsi begenilmis olabilir), sayfanin en altina inip yeni icerigi bekle
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            log('Sayfanin sonuna kaydirildi - yeni icerik bekleniyor.');
+
             bosKaydirmaSayisi++;
 
             // Icerik yuklenmiyorsa (bos kaydirma limiti yariyi gectiyse) Tor devreye gir
