@@ -1,2 +1,4 @@
 node_modules/
 hata-ekran.png
+src/
+build.js
