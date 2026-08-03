@@ -1,19 +1,22 @@
 name: 1000kitap Otomatik Begeni Botu
 
 on:
-  # Sabah 07:00 Turkiye saati (UTC 04:00) → 3750 begeni
-  # Aksam 18:00 Turkiye saati (UTC 15:00) → 3750 begeni
-  # Gunluk toplam: 3750 + 3750 = 7500 begeni
+  # Gunde 3 kez calisacak sekilde bolundu (6 saatlik Github limitine takilmamasi icin)
+  # Sabah 05:00 Turkiye saati (UTC 02:00) → 2500 begeni
+  # Oglen 13:00 Turkiye saati (UTC 10:00) → 2500 begeni
+  # Aksam 21:00 Turkiye saati (UTC 18:00) → 2500 begeni
+  # Gunluk toplam: 2500 * 3 = 7500 begeni
   schedule:
-    - cron: '0 4 * * *'   # Sabah 07:00 TR
-    - cron: '0 15 * * *'  # Aksam 18:00 TR
+    - cron: '0 2 * * *'   # 05:00 TR
+    - cron: '0 10 * * *'  # 13:00 TR
+    - cron: '0 18 * * *'  # 21:00 TR
 
   workflow_dispatch:
     inputs:
       gunluk_limit:
-        description: 'Bu calisma icin begeni limiti (varsayilan: 3750)'
+        description: 'Bu calisma icin begeni limiti (varsayilan: 2500)'
         required: false
-        default: '3750'
+        default: '2500'
       tor_kullan:
         description: 'Tor ile IP gizle?'
         required: false
@@ -25,9 +28,8 @@ jobs:
   begeni-botu:
     name: 'Begeni Botu'
     runs-on: ubuntu-latest
-    # Her calisma en fazla 3750 begeni yapar → ~2.5-3 saat
-    # 5 saatlik timeout bu icin fazlasiyla yeterli
-    timeout-minutes: 300
+    # Github'in tek islem icin maksimum suresi 360 dakikadir (6 saat).
+    timeout-minutes: 355
 
     steps:
       - name: Kaynak kodu indir
