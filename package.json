@@ -10,7 +10,8 @@
     "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "javascript-obfuscator": "^5.5.0"
