@@ -9,7 +9,8 @@
   "dependencies": {
     "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "express": "^4.21.0"
   },
   "devDependencies": {
     "javascript-obfuscator": "^5.5.0"
