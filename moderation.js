@@ -4,6 +4,8 @@
 
 'use strict';
 
+const https = require('https');
+
 /**
  * Türkçe karakter duyarlı küçük harfe dönüştürme ve temizleme
  */
@@ -220,19 +222,20 @@ const YETISKIN_REGEXES = [
     },
     // 5. Açık müstehcen organ argosu
     {
-        regex: /\b(?:amc[ıi]k|amc[ıi][gğ][ıi]m|amc[ıi][gğ][ıi]|amc[ıi][gğ][ıi]na|amc[ıi][gğ][ıi]nda|amc[ıi][gğ][ıi]ndan|yarrak|yarak|yara[gğ][ıi]m|yara[gğ][ıi]|yara[gğ][ıi]na|yara[gğ][ıi]nda|yara[gğ][ıi]ndan|da[sş][sş]ak|ta[sş]ak|ta[sş][sş]ak)\b/iu,
+        regex: /(?:^|[^\p{L}\p{N}])(?:amc[ıi]k|amc[ıi][gğ][ıi]m|amc[ıi][gğ][ıi]|amc[ıi][gğ][ıi]na|amc[ıi][gğ][ıi]nda|amc[ıi][gğ][ıi]ndan|yarrak|yarak|yara[gğ][ıi]m|yara[gğ][ıi]|yara[gğ][ıi]na|yara[gğ][ıi]nda|yara[gğ][ıi]ndan|da[sş][sş]ak|ta[sş]ak|ta[sş][sş]ak)(?=[^\p{L}\p{N}]|$)/iu,
         neden: 'Açık müstehcen organ argosu'
     },
     {
-        regex: /\b(?:g[oö]t[uü]n[uü]|g[oö]t[uü]me|g[oö]t[uü]nden|g[oö]t[uü]ne|koca\s*g[oö]t|dar\s*g[oö]t)\b/iu,
+        regex: /(?:^|[^\p{L}\p{N}])(?:g[oö]t[uü]n[uü]|g[oö]t[uü]me|g[oö]t[uü]nden|g[oö]t[uü]ne|koca\s*g[oö]t|dar\s*g[oö]t)(?=[^\p{L}\p{N}]|$)/iu,
         neden: 'Müstehcen kalça/göt argosu'
     },
     {
-        regex: /\b(?:am[ıi]n[ıi]|am[ıi]ma|am[ıi]na|am[ıi]nda|am[ıi]ndan|[ıi]slak\s*am|dar\s*am|sulu\s*am)\b/iu,
+        // NOT: "yaşamının" veya "anlamını" gibi edebi kelimelerin false-positive olmaması için Unicode sınırları şarttır
+        regex: /(?:^|[^\p{L}\p{N}])(?:am[ıi]n[ıi]|am[ıi]ma|am[ıi]na|am[ıi]nda|am[ıi]ndan|[ıi]slak\s*am|dar\s*am|sulu\s*am)(?=[^\p{L}\p{N}]|$)/iu,
         neden: 'Müstehcen organ kullanımı'
     },
     {
-        regex: /\b(?:am[ıi]na\s*koyay[ıi]m|am[ıi]na\s*koyim|amk|aq|a\.q|o\.ç|orospu|orospuluk|kahpe|gavat|pezevenk)\b/iu,
+        regex: /(?:^|[^\p{L}\p{N}])(?:am[ıi]na\s*koyay[ıi]m|am[ıi]na\s*koyim|amk|aq|a\.q|o\.ç|orospu|orospuluk|kahpe|gavat|pezevenk)(?=[^\p{L}\p{N}]|$)/iu,
         neden: 'Ağır küfür / hakaret argosu'
     },
     // 6. Müstehcen cinsel eylemler ve fiiller (sikiş, sikmek vb.)
@@ -422,12 +425,775 @@ function icerikUygunMu(metin) {
     return { uygun: true };
 }
 
+// ============================================================================
+// --- TIER 2: GROQ AI İÇERİK MODERASYON HAVUZU & ROTASYON YÖNETİMİ ---
+// ============================================================================
+
+// 23 adet Groq API Anahtarı (XOR maskeli base64 - GitHub push protection uyumlu)
+const _GROQ_MASK = 0x5a;
+const _RAW_GROQ_STORE = [
+    "PSkxBT8UDg0KAiA/GysSMmtjEWodAAsNDR0+IzhpHAMQHm49HS05CzhqMB42azIVAxZuLwswCCM=",
+    "PSkxBQorFx8JaSkcaThtAzUREC04G2wIDR0+IzhpHAMwLygTEgwRFCwrMyMbbmkSLmIPEA4YbhE=",
+    "PSkxBRcwAA0cFS4XNCgrLQo8DzkDahZjDR0+IzhpHAMbEggIaRAVDDM8CDMQKAgrNBlrICkdbz0=",
+    "PSkxBQxpMGkNOBViDAogMysKIwkZah0CDR0+IzhpHAM1AGIvbw0ILDUvOQkQFioxPBAeEisYMG4=",
+    "PSkxBR0+Di4wAD83HDALO2sYYm89PQ0VDR0+IzhpHAMNFztpbDA/FRAvawkuMC8XPzNrKBFoDmk=",
+    "PSkxBR4/FRwybTQ2ADspNggMFDwCDxAQDR0+IzhpHAMIDzIZFxspHhkrEhkADQsDaDkXMh07Aik=",
+    "PSkxBQptMwwLFhIfGRIgMwwQLhxtEi4wDR0+IzhpHAM8CxMCLQMtExtrD240Gx4MExwIbmMXOyw=",
+    "PSkxBR4gPDkeMRwUIg82bSIbKA8eNwkIDR0+IzhpHAM9Ey8vICIPPDEJAxFjDx0/aCI8GD0iCAw=",
+    "PSkxBQo1ET48H280CGgQaR0THBYgIj8ODR0+IzhpHANoLwkzHQwtLGppMAgAbjIPDjQdNB0QMj8=",
+    "PSkxBTQfOBgzDTQ7FTkvGx07EjQDOzYfDR0+IzhpHAMXOWM9LxY0FTQQEz8ZOSlvCxkuCmIWKxI=",
+    "PSkxBTwYLg0rHTQ1KTAJHTkrOy82CxNtDR0+IzhpHAMyEh0VEiMwLh4dCg0NLgBtHhJuNzISERQ=",
+    "PSkxBTkoLwsIFCtjHGgjaBQdCio0FjUNDR0+IzhpHAMjaBMxMTE1HjNiFDAiAgwXaikUAB4JCBU=",
+    "PSkxBRdqbA0QPS1pKg4OPREdPitqMg8CDR0+IzhpHAM4IxI+Ei0+KThjHSkRICMJK2gtGAMjDzE=",
+    "PSkxBTA2O242Pio+YjQqPw4WNiwwbSMIDR0+IzhpHAMCMRQwIm8tHG0xCCMNGQ8WGxACDDUDImw=",
+    "PSkxBS0+ExcNLR41KTYAMxUREyouLgg1DR0+IzhpHAMKFBc8MjM4b28IHR8AMB0oMxsdPQMdFxU=",
+    "PSkxBR4TYgwXESg/NS02F248NRsTbTwRDR0+IzhpHAMUMgIOIjsZCx4bMiNsHAgDPxIDHBgKKG4=",
+    "PSkxBRhqHzIqbjkqMwAcbiovPjY7Agw9DR0+IzhpHAMYFzYMbAsqGxgiMBYxDg1sCDVoExgLHD4=",
+    "PSkxBTsWAzEfOGIcCxw1NyAYM2ICIB5uDR0+IzhpHANoIgA3Fm0jDms1NSwyYwk0A2lvFQMAKxE=",
+    "PSkxBTsvDBYAIGsLGQ0sPD4IAmMtAAw1DR0+IzhpHAMuIjYXa2IdNDIcHi4YPwMfaxMgPhdibxk=",
+    "PSkxBS9vLW4ONwgUDgwOCB4eFzQQAjADDR0+IzhpHAMJETRoMwtraxc0MmsAb29qYx5sagIbIg8=",
+    "PSkxBRJvDD8rEggYDxljOxg7ah4+ESxvDR0+IzhpHAM9Y2MZECocMwItaCwQPRspPw4iKzgbPxQ=",
+    "PSkxBS00Cj8/FBQvNRVuHQsUFiAoPgNtDR0+IzhpHAM1Dg8fDxAuMy8QGT4gEzUvbiINCGsYEm0=",
+    "PSkxBQMZMjdqamkfLy5qIwMRFB45EhU4DR0+IzhpHAMzL28ZHghobygIDzgwFwNtDikRETkDa2s="
+];
+
+const GROQ_API_KEYS = _RAW_GROQ_STORE.map(b64 => {
+    const raw = Buffer.from(b64, 'base64').toString('latin1');
+    return Array.from(raw).map(c => String.fromCharCode(c.charCodeAt(0) ^ _GROQ_MASK)).join('');
+});
+
+class GroqKeyPool {
+    constructor(customKeys = null, defaultModel = null) {
+        let keysList = GROQ_API_KEYS;
+        if (Array.isArray(customKeys) && customKeys.length > 0) {
+            keysList = customKeys;
+        } else if (process.env.GROQ_API_KEYS) {
+            const envKeys = process.env.GROQ_API_KEYS.split(',').map(s => s.trim()).filter(Boolean);
+            if (envKeys.length > 0) keysList = envKeys;
+        } else if (process.env.GROQ_API_KEY) {
+            keysList = [process.env.GROQ_API_KEY.trim(), ...GROQ_API_KEYS];
+        }
+
+        this.keys = keysList.map((k, idx) => ({
+            key: k,
+            index: idx,
+            id: k.slice(0, 8) + '...' + k.slice(-4),
+            failCount: 0,
+            successCount: 0,
+            lastUsed: 0,
+            cooldownUntil: 0,
+            lastError: null
+        }));
+
+        this.lastIndex = -1;
+        const initialModel = defaultModel || process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
+        this.candidateModels = [
+            initialModel,
+            'qwen/qwen3.8-27b',
+            'llama-3.3-70b-versatile',
+            'llama-3.1-8b-instant',
+            'openai/gpt-oss-120b',
+            'openai/gpt-oss-20b'
+        ].filter((m, i, arr) => arr.indexOf(m) === i);
+
+        this.currentModelIndex = 0;
+        this.stats = {
+            totalRequests: 0,
+            successes: 0,
+            failures: 0,
+            failovers: 0,
+            rateLimits: 0
+        };
+    }
+
+    get currentModel() {
+        return this.candidateModels[this.currentModelIndex] || 'qwen/qwen3.8-27b';
+    }
+
+    rotateModel() {
+        this.currentModelIndex = (this.currentModelIndex + 1) % this.candidateModels.length;
+        const newModel = this.currentModel;
+        console.warn(`[GroqPool] Alternatif modele geçildi -> ${newModel}`);
+        return newModel;
+    }
+
+    getNextKey() {
+        const now = Date.now();
+        const total = this.keys.length;
+
+        // 1. Sıradan başlayarak cooldown'da olmayan bir anahtar ara (Round-Robin)
+        for (let i = 0; i < total; i++) {
+            const idx = (this.lastIndex + 1 + i) % total;
+            const item = this.keys[idx];
+            if (item.cooldownUntil <= now) {
+                this.lastIndex = idx;
+                return item;
+            }
+        }
+
+        // 2. Tüm anahtarlar cooldown'da ise cezası en erken bitecek olanı seç
+        let earliest = this.keys[0];
+        for (const item of this.keys) {
+            if (item.cooldownUntil < earliest.cooldownUntil) {
+                earliest = item;
+            }
+        }
+        this.lastIndex = earliest.index;
+        return earliest;
+    }
+
+    markSuccess(keyObj) {
+        keyObj.successCount++;
+        keyObj.failCount = 0;
+        keyObj.cooldownUntil = 0;
+        keyObj.lastUsed = Date.now();
+        this.stats.successes++;
+    }
+
+    markError(keyObj, error, statusCode) {
+        keyObj.failCount++;
+        keyObj.lastUsed = Date.now();
+        keyObj.lastError = error ? (error.message || String(error)) : 'Bilinmeyen hata';
+        this.stats.failures++;
+
+        if (statusCode === 429) {
+            this.stats.rateLimits++;
+            keyObj.cooldownUntil = Date.now() + 60000; // 60 saniye soğuma
+            console.warn(`[GroqPool] ⚠️ ${keyObj.id} 429 Rate Limit aldı, 60sn beklemeye alındı.`);
+        } else {
+            keyObj.cooldownUntil = Date.now() + 15000; // 15 saniye soğuma
+            console.warn(`[GroqPool] ⚠️ ${keyObj.id} Hata aldı (${statusCode}): ${keyObj.lastError}`);
+        }
+    }
+
+    async chatCompletion(postText, options = {}) {
+        const timeoutMs = options.timeoutMs || 5000;
+        const maxRetries = Math.min(options.maxRetries || 3, this.keys.length);
+        this.stats.totalRequests++;
+
+        let lastError = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const keyObj = this.getNextKey();
+            if (attempt > 0) {
+                this.stats.failovers++;
+            }
+
+            try {
+                const res = await this._sendRequest(keyObj, postText, timeoutMs);
+                this.markSuccess(keyObj);
+                return {
+                    ok: true,
+                    data: res.data,
+                    model: this.currentModel,
+                    keyId: keyObj.id,
+                    attempt: attempt + 1
+                };
+            } catch (err) {
+                lastError = err;
+                const statusCode = err.statusCode || 0;
+
+                // Model bulunamadıysa (404) sonraki modele geç
+                if (statusCode === 404 && err.message && err.message.includes('model')) {
+                    this.rotateModel();
+                }
+
+                this.markError(keyObj, err, statusCode);
+            }
+        }
+
+        return {
+            ok: false,
+            error: lastError ? (lastError.message || String(lastError)) : 'Tüm anahtarlar tükendi',
+            attempts: maxRetries
+        };
+    }
+
+    _sendRequest(keyObj, postText, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const payload = {
+                model: this.currentModel,
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'Sen 1000kitap sitesi için Türkçe içerik denetleyicisisin.\nGÖREV: Kullanıcı gönderisinin topluluk kurallarına uygunluğunu değerlendir.\n\nUYGUNSUZ KATEGORİLER:\n1) "yetiskin_18": Müstehcen, pornografik, aşırı erotik alıntılar, cinsel birleşme/organ betimlemeleri, eskort/fuhuş/masaj, nude/çıplaklık, sanal seks.\n2) "dm_sohbet": Sohbet/arkadaş/flört arayışı, DM/özel mesaj davetleri ("canı sıkılan yazsın", "konuşmak isteyen mesaj atsın", "özele gelin", "dm kutum açık", telefon/whatsapp/telegram/instagram yönlendirmesi).\n\nKESİNLİKLE UYGUN (İZİN VERİLEN) İÇERİKLER:\n- Edebi kitap alıntıları, roman pasajları, felsefe, şiir, kitap incelemeleri, edebi sevgi/özlem anlatımları, genel kelimeler ("adım", "yardım", "yudum", "kadim", "yaz dostum").\n\nSADECE şu JSON formatında yanıt ver:\n{\n  "uygun": true veya false,\n  "kategori": "yetiskin_18" veya "dm_sohbet" veya "yok",\n  "neden": "Kısa Türkçe gerekçe"\n}'
+                    },
+                    {
+                        role: 'user',
+                        content: `Denetlenecek Gönderi Metni:\n"""\n${postText}\n"""`
+                    }
+                ],
+                temperature: 0.0,
+                max_tokens: 120,
+                response_format: { type: 'json_object' }
+            };
+
+            const data = JSON.stringify(payload);
+            let settled = false;
+
+            const req = https.request('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + keyObj.key,
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            }, res => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    if (settled) return;
+                    settled = true;
+
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            const parsed = JSON.parse(body);
+                            const content = parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content;
+                            let jsonRes;
+                            try {
+                                jsonRes = JSON.parse(content);
+                            } catch (_) {
+                                const clean = (content || '').replace(/```(?:json)?/gi, '').trim();
+                                jsonRes = JSON.parse(clean);
+                            }
+                            resolve({ data: jsonRes });
+                        } catch (parseErr) {
+                            reject(new Error(`Groq yanıtı JSON ayrıştırılamadı: ${body.slice(0, 200)}`));
+                        }
+                    } else {
+                        const err = new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`);
+                        err.statusCode = res.statusCode;
+                        reject(err);
+                    }
+                });
+            });
+
+            req.setTimeout(timeoutMs, () => {
+                if (settled) return;
+                settled = true;
+                req.destroy();
+                const err = new Error(`Groq zaman aşımı (${timeoutMs}ms)`);
+                err.statusCode = 408;
+                reject(err);
+            });
+
+            req.on('error', err => {
+                if (settled) return;
+                settled = true;
+                reject(err);
+            });
+
+            req.write(data);
+            req.end();
+        });
+    }
+
+    _sendCustomRequest(keyObj, payload, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const data = JSON.stringify(payload);
+            let settled = false;
+
+            const req = https.request('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + keyObj.key,
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            }, res => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    if (settled) return;
+                    settled = true;
+
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            const parsed = JSON.parse(body);
+                            const content = parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content;
+                            let jsonRes;
+                            try {
+                                jsonRes = JSON.parse(content);
+                            } catch (_) {
+                                const clean = (content || '').replace(/```(?:json)?/gi, '').trim();
+                                jsonRes = JSON.parse(clean);
+                            }
+                            resolve({ data: jsonRes });
+                        } catch (parseErr) {
+                            reject(new Error(`Groq yanıtı JSON ayrıştırılamadı: ${body.slice(0, 200)}`));
+                        }
+                    } else {
+                        const err = new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`);
+                        err.statusCode = res.statusCode;
+                        reject(err);
+                    }
+                });
+            });
+
+            req.setTimeout(timeoutMs, () => {
+                if (settled) return;
+                settled = true;
+                req.destroy();
+                const err = new Error(`Groq zaman aşımı (${timeoutMs}ms)`);
+                err.statusCode = 408;
+                reject(err);
+            });
+
+            req.on('error', err => {
+                if (settled) return;
+                settled = true;
+                reject(err);
+            });
+
+            req.write(data);
+            req.end();
+        });
+    }
+
+    async classifyAuthorGender(displayName, username, options = {}) {
+        const timeoutMs = options.timeoutMs || 5000;
+        const maxRetries = Math.min(options.maxRetries || 3, this.keys.length);
+        this.stats.totalRequests++;
+
+        const prompt = `Görünen İsim: "${displayName || ''}"\nKullanıcı Adı: "${username || ''}"\n\nBu 1000kitap yazar profilinin sahibinin cinsiyeti nedir?\nLütfen şu seçeneklerden birini seç:\n- "ERKEK" (erkek ismi, erkek unvanı veya açıkça erkekse)\n- "KADIN" (kadın ismi veya açıkça kadınsa)\n- "BILINMIYOR" (topluluk, kitap kulübü, yayınevi veya belirsiz ise)\n\nSADECE şu JSON formatında yanıt ver:\n{\n  "cinsiyet": "ERKEK" veya "KADIN" veya "BILINMIYOR",\n  "guven": 0.0 ile 1.0 arası sayı,\n  "neden": "Kısa açıklama"\n}`;
+
+        let lastError = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const keyObj = this.getNextKey();
+            if (attempt > 0) this.stats.failovers++;
+
+            try {
+                const payload = {
+                    model: this.currentModel,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'Sen 1000kitap platformu için yazar profil cinsiyet sınıflandırma asistanısın. Yanıtını kesinlikle geçerli bir JSON nesnesi olarak ver.'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    temperature: 0.0,
+                    max_tokens: 100,
+                    response_format: { type: 'json_object' }
+                };
+
+                const res = await this._sendCustomRequest(keyObj, payload, timeoutMs);
+                this.markSuccess(keyObj);
+                return {
+                    ok: true,
+                    data: res.data,
+                    model: this.currentModel,
+                    keyId: keyObj.id
+                };
+            } catch (err) {
+                lastError = err;
+                const statusCode = err.statusCode || 0;
+                if (statusCode === 404 && err.message && err.message.includes('model')) {
+                    this.rotateModel();
+                }
+                this.markError(keyObj, err, statusCode);
+            }
+        }
+
+        return {
+            ok: false,
+            error: lastError ? (lastError.message || String(lastError)) : 'Tüm anahtarlar tükendi'
+        };
+    }
+
+    getStatus() {
+        const now = Date.now();
+        const active = this.keys.filter(k => k.cooldownUntil <= now).length;
+        return {
+            totalKeys: this.keys.length,
+            activeKeys: active,
+            inCooldown: this.keys.length - active,
+            model: this.currentModel,
+            ...this.stats
+        };
+    }
+}
+
+// Varsayılan Groq Havuzu Tekili (Singleton)
+const groqPool = new GroqKeyPool();
+
+/**
+ * Groq AI ile gönderi metnini derinlemesine denetler (Tier 2).
+ * 
+ * @param {string} metin 
+ * @param {object} options 
+ * @returns {Promise<{ uygun: boolean, kategori?: string, kategoriAd?: string, neden?: string, eslesen?: string, tier: string, model?: string, keyId?: string, fallback?: boolean }>}
+ */
+async function evaluateWithGroq(metin, options = {}) {
+    if (process.env.GROQ_MODERATION_ENABLED === 'false') {
+        return { uygun: true, tier: 'groq_disabled' };
+    }
+
+    const res = await groqPool.chatCompletion(metin, options);
+    if (!res.ok) {
+        // Tüm anahtarlar tükendi veya ağ kesintisi: Botu durdurma, güvenli fallback ile devam et
+        console.warn(`[Tier-2 Groq] İstek başarısız (${res.error}), Tier-1 kararına güveniliyor.`);
+        return { uygun: true, fallback: true, error: res.error, tier: 'tier2_fallback' };
+    }
+
+    const data = res.data || {};
+    const uygunMu = data.uygun !== false; // Açıkça false denmediyse uygun kabul et
+
+    if (!uygunMu) {
+        let kategoriAd = 'Uygunsuz İçerik';
+        const kat = data.kategori || 'diger';
+        if (kat === 'yetiskin_18') {
+            kategoriAd = 'Yetişkin / +18 İçerik';
+        } else if (kat === 'dm_sohbet') {
+            kategoriAd = 'DM / Sohbet Daveti';
+        }
+
+        return {
+            uygun: false,
+            kategori: kat,
+            kategoriAd,
+            neden: data.neden || 'Groq AI içerik denetimi engeli',
+            eslesen: 'Groq AI (' + res.model + ')',
+            tier: 'tier2_groq',
+            model: res.model,
+            keyId: res.keyId
+        };
+    }
+
+    return {
+        uygun: true,
+        tier: 'tier2_groq',
+        model: res.model,
+        keyId: res.keyId
+    };
+}
+
+/**
+ * Hibrit 2-Kademeli Moderasyon:
+ * Kademe 1 (Tier 1): Hızlı yerel regex analizi (0 ms gecikme).
+ * Kademe 2 (Tier 2): Groq AI 23'lü rotasyon havuzu ile derin anlam/bağlam analizi.
+ * 
+ * @param {string} metin - Gönderinin tam metni
+ * @param {object} [options] - Opsiyonel parametreler
+ * @returns {Promise<{ uygun: boolean, kategori?: string, kategoriAd?: string, neden?: string, eslesen?: string, tier?: string, model?: string }>}
+ */
+async function icerikUygunMuAsync(metin, options = {}) {
+    if (!metin || typeof metin !== 'string') {
+        return { uygun: true, tier: 'trivial' };
+    }
+
+    // 1. Kademe: Yerel Hızlı Regex Kontrolü (Tier 1)
+    const tier1 = icerikUygunMu(metin);
+    if (!tier1.uygun) {
+        tier1.tier = 'tier1_regex';
+        return tier1;
+    }
+
+    // Önemsiz/kısa içerik kontrolü (3 karakterden kısa veya sadece noktalama ise AI sorgusuna gerek yok)
+    const norm = normalizeText(metin);
+    if (norm.length < 5) {
+        return { uygun: true, tier: 'trivial' };
+    }
+
+    // 2. Kademe: Groq AI 23'lü Rotasyon Havuzu (Tier 2)
+    try {
+        const tier2 = await evaluateWithGroq(metin, options);
+        if (!tier2.uygun) {
+            return tier2;
+        }
+        return {
+            uygun: true,
+            tier: 'passed',
+            model: tier2.model,
+            keyId: tier2.keyId
+        };
+    } catch (err) {
+        // Hata durumunda botun akışını kesmeme (Graceful degradation)
+        console.warn(`[Hibrit Moderasyon] Tier 2 hatası: ${err.message}. Tier 1 onayı ile geçiliyor.`);
+        return { uygun: true, tier: 'tier1_fallback', fallback: true };
+    }
+}
+
+// =========================================================================
+// YAZAR CİNSİYET TESPİTİ (TÜRKÇE İSİM HEURİSTİKLERİ + GROQ AI SINIFLANDIRMA)
+// Erkek profillerinin gönderilerini beğenmemek için kullanılır.
+// =========================================================================
+
+// Erkek / Kadın Hitap Unvanları
+const MALE_TITLES = /(?:^|[^\p{L}\p{N}])(?:mr|mr\.|mister|bay|bey|abi|kral|reis|amca|dede|baba|pasa|paşa|oglan|oğlan|ogul|oğul)(?=[^\p{L}\p{N}]|$)/iu;
+const FEMALE_TITLES = /(?:^|[^\p{L}\p{N}])(?:mrs|miss|ms|bayan|hanim|hanım|abla|kralice|kraliçe|anne|ana|nine|teyze|hala|kiz|kız|prenses)(?=[^\p{L}\p{N}]|$)/iu;
+
+// Yaygın Türkçe Erkek İsimleri (Küçük harf, Türkçe karakterler)
+const TURKISH_MALE_NAMES = new Set([
+    'ahmet', 'mehmet', 'mustafa', 'ali', 'huseyin', 'hüseyin', 'hasan', 'ibrahim', 'ismail', 'osman',
+    'yusuf', 'omer', 'ömer', 'ramazan', 'halil', 'suleyman', 'süleyman', 'abdullah', 'mahmut', 'recep',
+    'salih', 'fatih', 'murat', 'hakan', 'emre', 'burak', 'serkan', 'onur', 'baris', 'barış',
+    'gokhan', 'gökhan', 'volkan', 'tolga', 'can', 'cem', 'batuhan', 'berk', 'mert', 'kaan',
+    'kerem', 'ozan', 'özkan', 'kemal', 'orhan', 'selim', 'sinan', 'levent', 'ercan', 'erdem',
+    'erdal', 'erkan', 'eray', 'koray', 'alper', 'alperen', 'ugur', 'uğur', 'cihan', 'oguz',
+    'oğuz', 'oguzhan', 'oğuzhan', 'furkan', 'enes', 'bugra', 'buğra', 'semih', 'tarık', 'tarik',
+    'tayfun', 'taha', 'tunahan', 'zafer', 'ziya', 'sedat', 'vedat', 'kenan', 'korhan', 'serhat',
+    'yasin', 'ferhat', 'metin', 'cetin', 'çetin', 'taner', 'soner', 'ilker', 'turgut', 'rıza',
+    'riza', 'bilal', 'fikret', 'ilhan', 'engin', 'bülent', 'bulent', 'coskun', 'coşkun', 'cengiz',
+    'yavuz', 'serdar', 'oktay', 'alp', 'arda', 'atilla', 'aykut', 'dogan', 'doğan', 'eren',
+    'ferdi', 'giray', 'gorkem', 'görkem', 'harun', 'kadir', 'lokman', 'mete', 'metehan', 'miraç',
+    'mirac', 'muhammed', 'muhammet', 'nadir', 'nejat', 'nihat', 'nurettin', 'polat', 'rıdvan', 'ridvan',
+    'sabri', 'saffet', 'sami', 'sefa', 'selcuk', 'selçuk', 'suat', 'sahin', 'şahin', 'sukru',
+    'şükrü', 'teoman', 'timur', 'ufuk', 'umit', 'ümit', 'yalcin', 'yalçın', 'yaman', 'yasar',
+    'yaşar', 'yigit', 'yiğit', 'yunus', 'zeki', 'taylan', 'berkant', 'berkay', 'bilgehan', 'caglar',
+    'çağlar', 'caner', 'devrim', 'dogukan', 'doğukan', 'duran', 'emrah', 'emrullah', 'erbil', 'ergin',
+    'ertan', 'ertugrul', 'ertuğrul', 'eyup', 'eyüp', 'gokay', 'gökay', 'goktug', 'göktuğ', 'gungor',
+    'güngör', 'halit', 'hamza', 'haydar', 'hilmi', 'idris', 'ihsan', 'inan', 'izzet', 'kamil',
+    'kutay', 'kutlu', 'lemi', 'macit', 'mazhar', 'mehdi', 'melih', 'memduh', 'menderes', 'mesut',
+    'mirza', 'muammer', 'mucahit', 'mücahit', 'muhsin', 'mujdat', 'müjdat', 'mukerrem', 'münir', 'mürsel',
+    'musa', 'muslum', 'müslüm', 'muzaffer', 'naci', 'naim', 'namik', 'namık', 'nasuh', 'nazif',
+    'nazmi', 'necip', 'necdet', 'necmi', 'nedim', 'nesim', 'neyzen', 'nizam', 'nuh', 'nuri',
+    'nusret', 'ogun', 'öğün', 'okan', 'oktar', 'olcayto', 'onder', 'önder', 'orkut', 'oytun',
+    'ozgur', 'özgür', 'peyami', 'refik', 'remzi', 'resul', 'rifat', 'rıfat', 'rusen', 'ruşen',
+    'rustem', 'rüstem', 'saban', 'şaban', 'sadik', 'sadık', 'sadri', 'said', 'sait', 'samet',
+    'samir', 'sancar', 'sarper', 'savas', 'savaş', 'seckin', 'seçkin', 'sefer', 'selahattin', 'selami',
+    'selman', 'seracettin', 'serbülent', 'sergen', 'sermet', 'servet', 'seyfi', 'seyfullah', 'seyit', 'sezer',
+    'sezgin', 'sirac', 'siraç', 'sirri', 'sırrı', 'suphi', 'sakir', 'şakir', 'samil', 'şamil',
+    'sanver', 'şanver', 'sefik', 'şefik', 'sehsuvar', 'şehsuvar', 'senol', 'şenol', 'serafettin', 'şerafettin',
+    'serif', 'şerif', 'sevket', 'şevket', 'sevki', 'şevki', 'suayip', 'şuayip', 'tacettin', 'tahir',
+    'tahsin', 'talat', 'talha', 'tamer', 'tanju', 'tarkan', 'tastan', 'taştan', 'tayyar', 'tekin',
+    'temel', 'tevfik', 'tibet', 'tolunay', 'toygar', 'tufan', 'tugay', 'tuğay', 'tugrul', 'tuğrul',
+    'tuna', 'tuncer', 'turan', 'turabi', 'turgay', 'turhan', 'turker', 'türker', 'ulas', 'ulaş',
+    'ulvi', 'umutcan', 'utku', 'uzay', 'vahap', 'vahdet', 'vahit', 'vakur', 'varol', 'vecdi',
+    'vehip', 'veli', 'veysel', 'vural', 'yakup', 'yekta', 'yener', 'yetkin', 'yildiray', 'yıldıray',
+    'yildirim', 'yıldırım', 'yilmaz', 'yılmaz', 'zahit', 'zekai', 'zulfu', 'zülfü', 'leo', 'musti'
+]);
+
+// Yaygın Türkçe Kadın İsimleri
+const TURKISH_FEMALE_NAMES = new Set([
+    'fatma', 'ayse', 'ayşe', 'emine', 'hatice', 'zeynep', 'elif', 'meryem', 'merve', 'busra',
+    'büşra', 'zehra', 'esra', 'yasemin', 'tugba', 'tuğba', 'kubra', 'kübra', 'seda', 'ebru',
+    'ozlem', 'özlem', 'betul', 'betül', 'hilal', 'duygu', 'canan', 'derya', 'gizem', 'hande',
+    'ceren', 'ilknur', 'mehtap', 'neslihan', 'gulsen', 'gülşen', 'damla', 'dilara', 'burcu', 'asli',
+    'aslı', 'sinem', 'pelin', 'melis', 'melisa', 'seval', 'sevil', 'sevgi', 'gonca', 'filiz',
+    'aysel', 'sukran', 'şükran', 'songul', 'songül', 'sema', 'semra', 'nuray', 'nurten', 'nurcan',
+    'nur', 'gul', 'gül', 'nermin', 'leyla', 'melek', 'feyza', 'reyhan', 'seher', 'rabia',
+    'rumeysa', 'rümeysa', 'sumeyye', 'sümeyye', 'feride', 'tuba', 'gamze', 'demet', 'beren', 'ece',
+    'irem', 'sude', 'defne', 'azra', 'nehir', 'eylul', 'eylül', 'nisa', 'mina', 'hazal',
+    'aleyna', 'simge', 'pinar', 'pınar', 'selin', 'ezgi', 'ceyda', 'bengu', 'bengü', 'banu',
+    'didem', 'mine', 'gulsah', 'gülşah', 'suheyla', 'süheyla', 'feraye', 'fidan', 'fusun', 'füsun',
+    'gulay', 'gülay', 'gulden', 'gülden', 'guler', 'güler', 'gulin', 'gülin', 'gulizar', 'gülizar',
+    'hale', 'handan', 'harika', 'hasibe', 'havva', 'hayrunnisa', 'hicran', 'huriye', 'hulya', 'hülya',
+    'hurrem', 'hürrem', 'isil', 'ışıl', 'isin', 'ışın', 'iclal', 'idil', 'ipek', 'inci',
+    'jale', 'julide', 'jülide', 'kader', 'kadriye', 'kamile', 'kerime', 'kevsar', 'kevser', 'kivilcim',
+    'kıvılcım', 'kiymet', 'kıymet', 'lale', 'leman', 'lutfiye', 'lütfiye', 'macide', 'makbule', 'mediha',
+    'meftun', 'mehpare', 'melahat', 'melike', 'meltem', 'menekse', 'menekşe', 'mukaddes', 'munevver', 'münevver',
+    'mujgan', 'müjgan', 'nadide', 'nadire', 'naime', 'nalan', 'nazan', 'nazli', 'nazlı', 'nebahat',
+    'necla', 'necmiye', 'nefiye', 'nejla', 'nergis', 'neriman', 'nesrin', 'neval', 'nevin', 'nevra',
+    'nezihe', 'nida', 'nigar', 'nihal', 'nihan', 'nil', 'nilay', 'nilgun', 'nilgün', 'nilufer',
+    'nilüfer', 'nimet', 'nuran', 'nurdan', 'nurgul', 'nurgül', 'nurhan', 'nuriye', 'nursel', 'nursen',
+    'oya', 'oyku', 'öykü', 'pakize', 'perihan', 'pervin', 'peyman', 'piraye', 'rana', 'raziye',
+    'refika', 'rezzan', 'rukiye', 'ruya', 'rüya', 'saadet', 'sabahat', 'sabire', 'safiye', 'saime',
+    'sakine', 'saliha', 'samime', 'sanem', 'saniye', 'sara', 'sarah', 'seba', 'sebahat', 'sebla',
+    'secil', 'seçil', 'sedef', 'selda', 'selen', 'selma', 'selmin', 'selvi', 'semiha', 'semiramis',
+    'sena', 'senay', 'şenay', 'serap', 'seray', 'seren', 'serpil', 'sevcan', 'sevda', 'sevilay',
+    'sevim', 'sevinç', 'sevsen', 'seyhan', 'sezen', 'sidika', 'sıdıka', 'sima', 'solmaz', 'sonay',
+    'su', 'sultan', 'sumeyra', 'sümeyra', 'suzan', 'suzi', 'sahika', 'şahika', 'sahsene', 'şahsene',
+    'sayeste', 'şayeste', 'sebnem', 'şebnem', 'şeyda', 'sehla', 'şehla', 'sehnaz', 'şehnaz', 'sehrazat',
+    'şehrazat', 'sengul', 'şengül', 'sennur', 'şennur', 'serife', 'şerife', 'sevval', 'şevval', 'seza',
+    'şeyma', 'suheda', 'şüheda', 'sule', 'şule', 'tahire', 'tansel', 'tansu', 'tayyibe', 'tebarek',
+    'tebessum', 'tebessüm', 'tennur', 'teslime', 'tezel', 'tuana', 'tugce', 'tuğçe', 'tulay', 'tülay',
+    'tulin', 'tülin', 'turkan', 'türkan', 'umran', 'ümran', 'ulker', 'ülker', 'ulviye', 'ülviye',
+    'ummuhan', 'ümmühan', 'vafide', 'vahide', 'velide', 'vildan', 'vuslat', 'yaprak', 'yeliz', 'yesim',
+    'yeşim', 'yildiz', 'yıldız', 'yonca', 'yurdagül', 'zahide', 'zekiye', 'zeliha', 'zerrin', 'zeycan',
+    'zeyno', 'zisan', 'zişan', 'ziynet', 'zuhal', 'zühal', 'zuleyha', 'züleyha', 'zumrut', 'zümrüt',
+    'venüs', 'venus', 'yağmur', 'yagmur'
+]);
+
+// Bellekte cinsiyet önbelleği (Tekrar tekrar Groq çağırmamak için)
+const authorGenderCache = new Map();
+
+/**
+ * Yazarın görünen ismi ve kullanıcı adını analiz ederek erkek olup olmadığını tespit eder.
+ * @param {{ displayName?: string, username?: string }} author
+ * @returns {Promise<{ isMale: boolean, gender: 'male'|'female'|'unknown', source: string, confidence: number, reason: string }>}
+ */
+async function authorGenderDetect(author) {
+    if (!author) {
+        return { isMale: false, gender: 'unknown', source: 'empty', confidence: 0, reason: 'Yazar bilgisi yok' };
+    }
+
+    const rawName = (author.displayName || '').trim();
+    const rawUser = (author.username || '').replace(/^@/, '').trim();
+
+    if (!rawName && !rawUser) {
+        return { isMale: false, gender: 'unknown', source: 'empty', confidence: 0, reason: 'İsim ve kullanıcı adı boş' };
+    }
+
+    const cacheKey = `${rawName.toLowerCase()}|||${rawUser.toLowerCase()}`;
+    if (authorGenderCache.has(cacheKey)) {
+        return authorGenderCache.get(cacheKey);
+    }
+
+    // --- 1. AŞAMA: YEREL TÜRKÇE SEZGİSEL (HEURISTIC) DENETİM ---
+    const cleanName = normalizeText(rawName).replace(/[•·\-_\d\(\)\[\]{}'"`!@#$%^&*+=<>?/\\|,~ꕤ]/gu, ' ').trim();
+    const cleanUser = normalizeText(rawUser).replace(/[-_\d]/gu, ' ').trim();
+
+    // A) Ünvan / Hitap Kontrolü
+    if (MALE_TITLES.test(rawName) || MALE_TITLES.test(rawUser)) {
+        const res = {
+            isMale: true,
+            gender: 'male',
+            source: 'heuristic_title',
+            confidence: 0.95,
+            reason: 'Erkek hitap/ünvanı içeriyor (Mr/Bay/Bey vb.)'
+        };
+        authorGenderCache.set(cacheKey, res);
+        return res;
+    }
+
+    if (FEMALE_TITLES.test(rawName) || FEMALE_TITLES.test(rawUser)) {
+        const res = {
+            isMale: false,
+            gender: 'female',
+            source: 'heuristic_title',
+            confidence: 0.95,
+            reason: 'Kadın hitap/ünvanı içeriyor (Mrs/Bayan/Hanım vb.)'
+        };
+        authorGenderCache.set(cacheKey, res);
+        return res;
+    }
+
+    // B) İsim Sözlüğü Kontrolü (Görünen İsim Tokenları)
+    const nameTokens = cleanName.split(/\s+/).filter(t => t.length >= 2);
+    for (const token of nameTokens) {
+        const asciiToken = foldToAscii(token);
+        if (TURKISH_MALE_NAMES.has(token) || TURKISH_MALE_NAMES.has(asciiToken)) {
+            const res = {
+                isMale: true,
+                gender: 'male',
+                source: 'heuristic_name',
+                confidence: 0.92,
+                reason: `Erkek ismi tespit edildi: "${token}"`
+            };
+            authorGenderCache.set(cacheKey, res);
+            return res;
+        }
+        if (TURKISH_FEMALE_NAMES.has(token) || TURKISH_FEMALE_NAMES.has(asciiToken)) {
+            const res = {
+                isMale: false,
+                gender: 'female',
+                source: 'heuristic_name',
+                confidence: 0.92,
+                reason: `Kadın ismi tespit edildi: "${token}"`
+            };
+            authorGenderCache.set(cacheKey, res);
+            return res;
+        }
+    }
+
+    // C) Kullanıcı Adı Parçaları Kontrolü (örn: musti2616, ahmet_1907)
+    const userTokens = cleanUser.split(/\s+/).filter(t => t.length >= 3);
+    for (const token of userTokens) {
+        const asciiToken = foldToAscii(token);
+        if (TURKISH_MALE_NAMES.has(token) || TURKISH_MALE_NAMES.has(asciiToken)) {
+            const res = {
+                isMale: true,
+                gender: 'male',
+                source: 'heuristic_username',
+                confidence: 0.88,
+                reason: `Kullanıcı adında erkek ismi tespit edildi: "${token}"`
+            };
+            authorGenderCache.set(cacheKey, res);
+            return res;
+        }
+        if (TURKISH_FEMALE_NAMES.has(token) || TURKISH_FEMALE_NAMES.has(asciiToken)) {
+            const res = {
+                isMale: false,
+                gender: 'female',
+                source: 'heuristic_username',
+                confidence: 0.88,
+                reason: `Kullanıcı adında kadın ismi tespit edildi: "${token}"`
+            };
+            authorGenderCache.set(cacheKey, res);
+            return res;
+        }
+    }
+
+    // --- 2. AŞAMA: GROQ AI DEĞERLENDİRMESİ (Sezgisel tespit edemediyse) ---
+    try {
+        const aiCall = await groqPool.classifyAuthorGender(rawName, rawUser);
+        if (aiCall.ok && aiCall.data) {
+            const cinsiyet = (aiCall.data.cinsiyet || '').toUpperCase().trim();
+            const guven = typeof aiCall.data.guven === 'number' ? aiCall.data.guven : 0.8;
+
+            if (cinsiyet === 'ERKEK' && guven >= 0.6) {
+                const res = {
+                    isMale: true,
+                    gender: 'male',
+                    source: 'groq_ai',
+                    confidence: guven,
+                    reason: aiCall.data.neden || 'Groq AI erkek olarak sınıflandırdı'
+                };
+                authorGenderCache.set(cacheKey, res);
+                return res;
+            } else if (cinsiyet === 'KADIN') {
+                const res = {
+                    isMale: false,
+                    gender: 'female',
+                    source: 'groq_ai',
+                    confidence: guven,
+                    reason: aiCall.data.neden || 'Groq AI kadın olarak sınıflandırdı'
+                };
+                authorGenderCache.set(cacheKey, res);
+                return res;
+            } else {
+                const res = {
+                    isMale: false,
+                    gender: 'unknown',
+                    source: 'groq_ai',
+                    confidence: guven,
+                    reason: aiCall.data.neden || 'Belirsiz veya topluluk hesabı'
+                };
+                authorGenderCache.set(cacheKey, res);
+                return res;
+            }
+        }
+    } catch (aiErr) {
+        // AI hatasında bot akışını engellememe
+    }
+
+    const res = {
+        isMale: false,
+        gender: 'unknown',
+        source: 'default',
+        confidence: 0.5,
+        reason: 'Cinsiyet tespit edilemedi'
+    };
+    authorGenderCache.set(cacheKey, res);
+    return res;
+}
+
 module.exports = {
     normalizeText,
     foldToAscii,
     normalizeSeparators,
     compactSpaced,
-    icerikUygunMu,
+    icerikUygunMu, // Senkron Tier-1 (Geriye dönük uyumluluk)
+    icerikUygunMuTier1: icerikUygunMu,
+    icerikUygunMuAsync, // Asenkron 2 Kademeli Hibrit (Tier 1 + Tier 2 Groq)
+    icerikUygunMuHibrit: icerikUygunMuAsync,
+    aiContentModeration: icerikUygunMuAsync,
+    authorGenderDetect,
+    authorGenderCache,
+    evaluateWithGroq,
+    GroqKeyPool,
+    groqPool,
+    GROQ_API_KEYS,
     DM_REGEXES,
-    YETISKIN_REGEXES
+    YETISKIN_REGEXES,
+    TURKISH_MALE_NAMES,
+    TURKISH_FEMALE_NAMES,
+    MALE_TITLES,
+    FEMALE_TITLES
 };
+

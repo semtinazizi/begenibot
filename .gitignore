@@ -2,3 +2,7 @@ node_modules/
 hata-ekran.png
 src/
 build.js
+*.key
+.keys/
+test_*.js
+.env
