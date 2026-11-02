@@ -560,6 +560,10 @@ class GroqKeyPool {
             this.stats.rateLimits++;
             keyObj.cooldownUntil = Date.now() + 60000; // 60 saniye soğuma
             console.warn(`[GroqPool] ⚠️ ${keyObj.id} 429 Rate Limit aldı, 60sn beklemeye alındı.`);
+        } else if (statusCode === 400) {
+            // Prompt formatı veya token kesilme hatası anahtar kaynaklı değildir
+            keyObj.cooldownUntil = 0;
+            console.warn(`[GroqPool] ⚠️ İstek doğrulama hatası (400): ${keyObj.lastError}`);
         } else {
             keyObj.cooldownUntil = Date.now() + 15000; // 15 saniye soğuma
             console.warn(`[GroqPool] ⚠️ ${keyObj.id} Hata aldı (${statusCode}): ${keyObj.lastError}`);
@@ -616,7 +620,7 @@ class GroqKeyPool {
                 messages: [
                     {
                         role: 'system',
-                        content: 'Sen 1000kitap sitesi için Türkçe içerik denetleyicisisin.\nGÖREV: Kullanıcı gönderisinin topluluk kurallarına uygunluğunu değerlendir.\n\nUYGUNSUZ KATEGORİLER:\n1) "yetiskin_18": Müstehcen, pornografik, aşırı erotik alıntılar, cinsel birleşme/organ betimlemeleri, eskort/fuhuş/masaj, nude/çıplaklık, sanal seks.\n2) "dm_sohbet": Sohbet/arkadaş/flört arayışı, DM/özel mesaj davetleri ("canı sıkılan yazsın", "konuşmak isteyen mesaj atsın", "özele gelin", "dm kutum açık", telefon/whatsapp/telegram/instagram yönlendirmesi).\n\nKESİNLİKLE UYGUN (İZİN VERİLEN) İÇERİKLER:\n- Edebi kitap alıntıları, roman pasajları, felsefe, şiir, kitap incelemeleri, edebi sevgi/özlem anlatımları, genel kelimeler ("adım", "yardım", "yudum", "kadim", "yaz dostum").\n\nSADECE şu JSON formatında yanıt ver:\n{\n  "uygun": true veya false,\n  "kategori": "yetiskin_18" veya "dm_sohbet" veya "yok",\n  "neden": "Kısa Türkçe gerekçe"\n}'
+                        content: 'Sen 1000kitap sitesi için Türkçe içerik denetleyicisisin.\nGÖREV: Kullanıcı gönderisinin topluluk kurallarına uygunluğunu değerlendir.\n\nUYGUNSUZ KATEGORİLER:\n1) "yetiskin_18": Müstehcen, pornografik, aşırı erotik alıntılar, cinsel birleşme/organ betimlemeleri, eskort/fuhuş/masaj, nude/çıplaklık, sanal seks.\n2) "dm_sohbet": Sohbet/arkadaş/flört arayışı, DM/özel mesaj davetleri ("canı sıkılan yazsın", "konuşmak isteyen mesaj atsın", "özele gelin", "dm kutum açık", telefon/whatsapp/telegram/instagram yönlendirmesi).\n\nKESİNLİKLE UYGUN (İZİN VERİLEN) İÇERİKLER:\n- Edebi kitap alıntıları, roman pasajları, felsefe, şiir, kitap incelemeleri, edebi sevgi/özlem anlatımları, genel kelimeler ("adım", "yardım", "yudum", "kadim", "yaz dostum").\n\nSADECE şu JSON formatında yanıt ver:\n{\n  "uygun": true veya false,\n  "kategori": "yetiskin_18" veya "dm_sohbet" veya "yok",\n  "neden": "Kısa Türkçe gerekçe (en fazla 15 kelime)"\n}'
                     },
                     {
                         role: 'user',
@@ -624,7 +628,7 @@ class GroqKeyPool {
                     }
                 ],
                 temperature: 0.0,
-                max_tokens: 120,
+                max_tokens: 350,
                 response_format: { type: 'json_object' }
             };
 
@@ -777,7 +781,7 @@ class GroqKeyPool {
                         }
                     ],
                     temperature: 0.0,
-                    max_tokens: 100,
+                    max_tokens: 250,
                     response_format: { type: 'json_object' }
                 };
 
@@ -965,7 +969,51 @@ const TURKISH_MALE_NAMES = new Set([
     'tuna', 'tuncer', 'turan', 'turabi', 'turgay', 'turhan', 'turker', 'türker', 'ulas', 'ulaş',
     'ulvi', 'umutcan', 'utku', 'uzay', 'vahap', 'vahdet', 'vahit', 'vakur', 'varol', 'vecdi',
     'vehip', 'veli', 'veysel', 'vural', 'yakup', 'yekta', 'yener', 'yetkin', 'yildiray', 'yıldıray',
-    'yildirim', 'yıldırım', 'yilmaz', 'yılmaz', 'zahit', 'zekai', 'zulfu', 'zülfü', 'leo', 'musti'
+    'yildirim', 'yıldırım', 'yilmaz', 'yılmaz', 'zahit', 'zekai', 'zulfu', 'zülfü', 'leo', 'musti',
+    // Popüler eklenen erkek isimleri
+    'demir', 'efe', 'ege', 'bora', 'doruk', 'poyraz', 'kuzey', 'ayaz', 'cinar', 'çınar',
+    'cagri', 'çağrı', 'yagiz', 'yağız', 'sarp', 'umut', 'ediz', 'miran', 'alaz', 'barlas',
+    'kayra', 'guney', 'güney', 'timucin', 'timuçin', 'toprak', 'alican', 'batualp', 'berke',
+    'canberk', 'goksu', 'göksu', 'ilkay', 'koray', 'koralp', 'omerfaruk', 'ömerfaruk', 'sametcan',
+    'yigitcan', 'yiğitcan', 'yigitalp', 'yiğitalp', 'polat', 'arslan', 'aslan', 'aybar', 'aybars',
+    'bedirhan', 'berdan', 'bertan', 'berkin', 'baha', 'bahadir', 'bahadır', 'bozkurt', 'cavit',
+    'cezmi', 'cihangir', 'civangir', 'danyal', 'dinçer', 'dincer', 'doganay', 'doğanay', 'dogus',
+    'doğuş', 'durukan', 'efecan', 'efekan', 'egemen', 'elvan', 'ender', 'enescan', 'enis',
+    'erenay', 'erginay', 'ergun', 'ergün', 'erhan', 'erkut', 'ertunc', 'ertunç', 'fadıl',
+    'fadil', 'fahri', 'feridun', 'fehmi', 'feyyaz', 'gencay', 'gencalp', 'gencer', 'girayhan',
+    'gokay', 'gökay', 'gokberk', 'gökberk', 'gokmen', 'gökmen', 'guven', 'güven', 'guvenc',
+    'güvenç', 'haldun', 'haluk', 'hasret', 'hayri', 'hazim', 'hazım', 'hekim', 'hidir',
+    'hıdır', 'himmet', 'husamettin', 'hüsamettin', 'isik', 'ışık', 'iskender', 'islam', 'israfil',
+    'kagan', 'kağan', 'kahraman', 'kamer', 'kamuran', 'kandemir', 'karahan', 'kayahan', 'kayhan',
+    'kemalettin', 'kivanc', 'kıvanç', 'korcan', 'korkmaz', 'korkut', 'kudret', 'kursat', 'kürşat',
+    'kutalp', 'kutluhan', 'lutfi', 'lütfi', 'mahir', 'malik', 'mansur', 'masum', 'mecnun',
+    'medet', 'mestan', 'mithat', 'muhit', 'muhittin', 'muhtar', 'munir', 'münir', 'murathan',
+    'mursel', 'mürsel', 'murteza', 'mürteza', 'muslum', 'müslüm', 'muzaffer', 'nabi', 'nacit',
+    'nadim', 'nafi', 'nahit', 'nahid', 'nail', 'nazif', 'nazmi', 'necati', 'necat', 'neset',
+    'neşet', 'nesim', 'neva', 'niyazi', 'nuh', 'nuri', 'nusret', 'ogulcan', 'oğulcan', 'oguzcan',
+    'oğuzcan', 'olcay', 'oltun', 'omur', 'ömür', 'onuralp', 'orhun', 'orhan', 'osman', 'ozer',
+    'özer', 'ozgur', 'özgür', 'pakel', 'pamir', 'parla', 'parlar', 'payidar', 'pasa', 'paşa',
+    'pehlivan', 'pertev', 'piri', 'ragip', 'ragıp', 'rahmi', 'raif', 'rasim', 'rasit', 'raşit',
+    'rauf', 'refet', 'reha', 'resat', 'reşat', 'rifat', 'rıfat', 'riza', 'rıza', 'rüstem',
+    'rustem', 'sabri', 'sadi', 'safak', 'şafak', 'sahin', 'şahin', 'saip', 'samih', 'saner',
+    'savas', 'savaş', 'saygin', 'saygın', 'sebahattin', 'seckin', 'seçkin', 'sedat', 'sefer',
+    'sefi', 'şefi', 'selim', 'selman', 'semer', 'semih', 'senih', 'sercan', 'serhat', 'sermet',
+    'servet', 'sevket', 'şevket', 'sezai', 'sezgin', 'sinan', 'somer', 'soner', 'suat', 'sukru',
+    'şükrü', 'suleyman', 'süleyman', 'tacettin', 'taha', 'tahir', 'tahsin', 'talat', 'talha',
+    'talip', 'tamer', 'tan', 'taner', 'tangut', 'tanju', 'tankut', 'tarcan', 'tarik', 'tarık',
+    'tarkan', 'taskin', 'taşkın', 'tayfun', 'taygun', 'taylan', 'tayyar', 'tekin', 'tekinalp',
+    'temel', 'teoman', 'tercan', 'tevfik', 'tibet', 'timur', 'timurtas', 'timurtaş', 'tolga',
+    'tolgahan', 'tolunay', 'tonguc', 'tonguç', 'toprak', 'toros', 'tosun', 'toygar', 'tufan',
+    'tugay', 'tuğay', 'tugberk', 'tuğberk', 'tugrul', 'tuğrul', 'tuna', 'tunahan', 'tunc',
+    'tunç', 'tuncay', 'tuncer', 'turan', 'turay', 'turgay', 'turgut', 'turhan', 'turker',
+    'türker', 'tutku', 'ugur', 'uğur', 'ugurcan', 'uğurcan', 'ulas', 'ulaş', 'uluc', 'uluç',
+    'ulvi', 'umit', 'ümit', 'umut', 'umutcan', 'unal', 'ünal', 'utku', 'uzay', 'vafi',
+    'vahap', 'vahdet', 'vahit', 'vakkas', 'vakur', 'valay', 'varol', 'vedat', 'vefa', 'veli',
+    'volkan', 'vural', 'yagiz', 'yağız', 'yahya', 'yakup', 'yalcin', 'yalçın', 'yalin',
+    'yalın', 'yalkin', 'yalkın', 'yaman', 'yasar', 'yaşar', 'yasin', 'yavuz', 'yekta',
+    'yener', 'yetkin', 'yigit', 'yiğit', 'yildiray', 'yıldıray', 'yildirim', 'yıldırım', 'yilmaz',
+    'yılmaz', 'yunus', 'yusuf', 'zafer', 'zahit', 'zakir', 'zehir', 'zekai', 'zeki', 'zihni',
+    'ziya', 'zorlu', 'zulfikar', 'zülfikar', 'zulfu', 'zülfü'
 ]);
 
 // Yaygın Türkçe Kadın İsimleri
@@ -1006,11 +1054,32 @@ const TURKISH_FEMALE_NAMES = new Set([
     'ummuhan', 'ümmühan', 'vafide', 'vahide', 'velide', 'vildan', 'vuslat', 'yaprak', 'yeliz', 'yesim',
     'yeşim', 'yildiz', 'yıldız', 'yonca', 'yurdagül', 'zahide', 'zekiye', 'zeliha', 'zerrin', 'zeycan',
     'zeyno', 'zisan', 'zişan', 'ziynet', 'zuhal', 'zühal', 'zuleyha', 'züleyha', 'zumrut', 'zümrüt',
-    'venüs', 'venus', 'yağmur', 'yagmur'
+    'venüs', 'venus', 'yağmur', 'yagmur',
+    // Popüler eklenen kadın isimleri
+    'alya', 'lina', 'ada', 'duru', 'masal', 'derin', 'asya', 'kumsal', 'bade', 'gece',
+    'ela', 'beril', 'alara', 'belinay', 'afra', 'serra', 'acelya', 'açelya', 'ayca', 'ayça',
+    'ayben', 'aysun', 'beste', 'beyza', 'bilge', 'buket', 'cansu', 'dicle', 'dila', 'dilruba',
+    'ecehan', 'ecem', 'edanur', 'ekin', 'elvin', 'eslem', 'gokce', 'gökçe', 'gunce', 'günce',
+    'gunes', 'güneş', 'havin', 'helin', 'ildem', 'ilayda', 'ilke', 'mavis', 'maviş', 'melsa',
+    'mihrimah', 'miray', 'nergiz', 'nevbahar', 'nisan', 'nisanur', 'nursima', 'sare', 'sudenas',
+    'sudegul', 'sudegül', 'tutku', 'umay', 'yasmin', 'yaren', 'zelal'
 ]);
 
-// Bellekte cinsiyet önbelleği (Tekrar tekrar Groq çağırmamak için)
+// Bellekte cinsiyet önbelleği (Tekrar tekrar Groq çağırmamak için, max 10.000 kayıt)
 const authorGenderCache = new Map();
+
+function setAuthorGenderCache(key, val) {
+    if (authorGenderCache.size >= 10000) {
+        // En eski 2000 kaydı sil (LRU benzeri FIFO temizliği)
+        const it = authorGenderCache.keys();
+        for (let i = 0; i < 2000; i++) {
+            const next = it.next();
+            if (next.done) break;
+            authorGenderCache.delete(next.value);
+        }
+    }
+    authorGenderCache.set(key, val);
+}
 
 /**
  * Yazarın görünen ismi ve kullanıcı adını analiz ederek erkek olup olmadığını tespit eder.
@@ -1029,14 +1098,15 @@ async function authorGenderDetect(author) {
         return { isMale: false, gender: 'unknown', source: 'empty', confidence: 0, reason: 'İsim ve kullanıcı adı boş' };
     }
 
-    const cacheKey = `${rawName.toLowerCase()}|||${rawUser.toLowerCase()}`;
+    const cacheKey = `${normalizeText(rawName)}|||${normalizeText(rawUser)}`;
     if (authorGenderCache.has(cacheKey)) {
         return authorGenderCache.get(cacheKey);
     }
 
     // --- 1. AŞAMA: YEREL TÜRKÇE SEZGİSEL (HEURISTIC) DENETİM ---
-    const cleanName = normalizeText(rawName).replace(/[•·\-_\d\(\)\[\]{}'"`!@#$%^&*+=<>?/\\|,~ꕤ]/gu, ' ').trim();
-    const cleanUser = normalizeText(rawUser).replace(/[-_\d]/gu, ' ').trim();
+    // Unicode harf harici tüm sembol, rakam ve emojileri boşluğa çevir
+    const cleanName = normalizeText(rawName).replace(/[^\p{L}]+/gu, ' ').trim();
+    const cleanUser = rawUser.replace(/([a-z])([A-Z])/g, '$1 $2').toLocaleLowerCase('tr-TR').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
     // A) Ünvan / Hitap Kontrolü
     if (MALE_TITLES.test(rawName) || MALE_TITLES.test(rawUser)) {
@@ -1047,7 +1117,7 @@ async function authorGenderDetect(author) {
             confidence: 0.95,
             reason: 'Erkek hitap/ünvanı içeriyor (Mr/Bay/Bey vb.)'
         };
-        authorGenderCache.set(cacheKey, res);
+        setAuthorGenderCache(cacheKey, res);
         return res;
     }
 
@@ -1059,67 +1129,94 @@ async function authorGenderDetect(author) {
             confidence: 0.95,
             reason: 'Kadın hitap/ünvanı içeriyor (Mrs/Bayan/Hanım vb.)'
         };
-        authorGenderCache.set(cacheKey, res);
+        setAuthorGenderCache(cacheKey, res);
         return res;
     }
 
     // B) İsim Sözlüğü Kontrolü (Görünen İsim Tokenları)
     const nameTokens = cleanName.split(/\s+/).filter(t => t.length >= 2);
+    let nameHasMale = false;
+    let nameHasFemale = false;
+    let nameMaleToken = '';
+    let nameFemaleToken = '';
+
     for (const token of nameTokens) {
         const asciiToken = foldToAscii(token);
         if (TURKISH_MALE_NAMES.has(token) || TURKISH_MALE_NAMES.has(asciiToken)) {
-            const res = {
-                isMale: true,
-                gender: 'male',
-                source: 'heuristic_name',
-                confidence: 0.92,
-                reason: `Erkek ismi tespit edildi: "${token}"`
-            };
-            authorGenderCache.set(cacheKey, res);
-            return res;
+            nameHasMale = true;
+            if (!nameMaleToken) nameMaleToken = token;
         }
         if (TURKISH_FEMALE_NAMES.has(token) || TURKISH_FEMALE_NAMES.has(asciiToken)) {
-            const res = {
-                isMale: false,
-                gender: 'female',
-                source: 'heuristic_name',
-                confidence: 0.92,
-                reason: `Kadın ismi tespit edildi: "${token}"`
-            };
-            authorGenderCache.set(cacheKey, res);
-            return res;
+            nameHasFemale = true;
+            if (!nameFemaleToken) nameFemaleToken = token;
         }
+    }
+
+    // Çelişki yoksa tek taraflı sonuca göre karar ver; çelişki varsa Groq AI'ya bırak
+    if (nameHasMale && !nameHasFemale) {
+        const res = {
+            isMale: true,
+            gender: 'male',
+            source: 'heuristic_name',
+            confidence: 0.92,
+            reason: `Erkek ismi tespit edildi: "${nameMaleToken}"`
+        };
+        setAuthorGenderCache(cacheKey, res);
+        return res;
+    } else if (nameHasFemale && !nameHasMale) {
+        const res = {
+            isMale: false,
+            gender: 'female',
+            source: 'heuristic_name',
+            confidence: 0.92,
+            reason: `Kadın ismi tespit edildi: "${nameFemaleToken}"`
+        };
+        setAuthorGenderCache(cacheKey, res);
+        return res;
     }
 
     // C) Kullanıcı Adı Parçaları Kontrolü (örn: musti2616, ahmet_1907)
     const userTokens = cleanUser.split(/\s+/).filter(t => t.length >= 3);
+    let userHasMale = false;
+    let userHasFemale = false;
+    let userMaleToken = '';
+    let userFemaleToken = '';
+
     for (const token of userTokens) {
         const asciiToken = foldToAscii(token);
         if (TURKISH_MALE_NAMES.has(token) || TURKISH_MALE_NAMES.has(asciiToken)) {
-            const res = {
-                isMale: true,
-                gender: 'male',
-                source: 'heuristic_username',
-                confidence: 0.88,
-                reason: `Kullanıcı adında erkek ismi tespit edildi: "${token}"`
-            };
-            authorGenderCache.set(cacheKey, res);
-            return res;
+            userHasMale = true;
+            if (!userMaleToken) userMaleToken = token;
         }
         if (TURKISH_FEMALE_NAMES.has(token) || TURKISH_FEMALE_NAMES.has(asciiToken)) {
-            const res = {
-                isMale: false,
-                gender: 'female',
-                source: 'heuristic_username',
-                confidence: 0.88,
-                reason: `Kullanıcı adında kadın ismi tespit edildi: "${token}"`
-            };
-            authorGenderCache.set(cacheKey, res);
-            return res;
+            userHasFemale = true;
+            if (!userFemaleToken) userFemaleToken = token;
         }
     }
 
-    // --- 2. AŞAMA: GROQ AI DEĞERLENDİRMESİ (Sezgisel tespit edemediyse) ---
+    if (userHasMale && !userHasFemale) {
+        const res = {
+            isMale: true,
+            gender: 'male',
+            source: 'heuristic_username',
+            confidence: 0.88,
+            reason: `Kullanıcı adında erkek ismi tespit edildi: "${userMaleToken}"`
+        };
+        setAuthorGenderCache(cacheKey, res);
+        return res;
+    } else if (userHasFemale && !userHasMale) {
+        const res = {
+            isMale: false,
+            gender: 'female',
+            source: 'heuristic_username',
+            confidence: 0.88,
+            reason: `Kullanıcı adında kadın ismi tespit edildi: "${userFemaleToken}"`
+        };
+        setAuthorGenderCache(cacheKey, res);
+        return res;
+    }
+
+    // --- 2. AŞAMA: GROQ AI DEĞERLENDİRMESİ (Sezgisel tespit edemediyse veya çelişki varsa) ---
     try {
         const aiCall = await groqPool.classifyAuthorGender(rawName, rawUser);
         if (aiCall.ok && aiCall.data) {
@@ -1134,7 +1231,7 @@ async function authorGenderDetect(author) {
                     confidence: guven,
                     reason: aiCall.data.neden || 'Groq AI erkek olarak sınıflandırdı'
                 };
-                authorGenderCache.set(cacheKey, res);
+                setAuthorGenderCache(cacheKey, res);
                 return res;
             } else if (cinsiyet === 'KADIN') {
                 const res = {
@@ -1144,7 +1241,7 @@ async function authorGenderDetect(author) {
                     confidence: guven,
                     reason: aiCall.data.neden || 'Groq AI kadın olarak sınıflandırdı'
                 };
-                authorGenderCache.set(cacheKey, res);
+                setAuthorGenderCache(cacheKey, res);
                 return res;
             } else {
                 const res = {
@@ -1154,7 +1251,7 @@ async function authorGenderDetect(author) {
                     confidence: guven,
                     reason: aiCall.data.neden || 'Belirsiz veya topluluk hesabı'
                 };
-                authorGenderCache.set(cacheKey, res);
+                setAuthorGenderCache(cacheKey, res);
                 return res;
             }
         }
@@ -1169,7 +1266,7 @@ async function authorGenderDetect(author) {
         confidence: 0.5,
         reason: 'Cinsiyet tespit edilemedi'
     };
-    authorGenderCache.set(cacheKey, res);
+    setAuthorGenderCache(cacheKey, res);
     return res;
 }
 
