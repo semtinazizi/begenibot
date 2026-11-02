@@ -33,6 +33,18 @@ function foldToAscii(text) {
 }
 
 /**
+ * Kelimeler arasındaki alt çizgi, tire, bölü, dalga gibi tuzak ayraçları boşluğa çevirir
+ * Örn: "canı_sıkılan_yazsın" -> "canı sıkılan yazsın", "konuşmak-isteyen" -> "konuşmak isteyen"
+ */
+function normalizeSeparators(text) {
+    if (!text) return '';
+    return text
+        .replace(/[\/\\_\-~*|•]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
  * Harfleri boşlukla, noktayla veya tireyle ayrılmış tuzak ifadeleri ("d m", "d.m", "s e k s", "p o r n o") birleştirir
  */
 function compactSpaced(text) {
@@ -51,39 +63,39 @@ const DM_REGEXES = [
         regex: /(?:^|[^\p{L}\p{N}])d[\s._\-\/]*m(?:'?(?:den|dan|e|ye|de|da|i|yi|in|nin|im|le|yle|ler|lere|lerin|e\s*gelin|e\s*beklerim|e\s*yaz[ıi]n|le[sş]elim|le[sş]mek|le[sş]iriz|s))?(?:[^\p{L}\p{N}]|$)/iu,
         neden: 'Doğrudan DM ifadesi'
     },
-    // 2. DM davetleri ve tamlamaları ("dm gelin", "dm at", "dm atın", "dm kutum", "dm açık", "dm bekliyorum", "dm düş", "dm buyrun")
+    // 2. DM davetleri ve tamlamaları ("dm gelin", "dm at", "dm atın", "dm atabilirsin", "dm kutum", "dm açık", "dm bekliyorum", "dm düş", "dm buyrun")
     {
-        regex: /(?:^|[^\p{L}\p{N}])dm\s+(?:gelin|gel|at|at[ıi]n|atin|ats[ıi]n|atsin|atabilir|atabilirsiniz|ata\s*bilirsiniz|atar\s*m[ıi]s[ıi]n[ıi]z?|kutum|kutusu|kutuma|a[cç][ıi]k|acik|bekliyorum|beklerim|buyrun|buyurun|serbest|d[uü][sş]|yaz[ıi]n|yaz|yazabilirsiniz|l[uü]tfen|pls)(?:[^\p{L}\p{N}]|$)/iu,
+        regex: /(?:^|[^\p{L}\p{N}])dm\s+(?:gelin|gel|at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?|ar\s*m[ıi]s[ıi]n[ıi]z?)?|kutum|kutusu|kutuma|a[cç][ıi]k|acik|bekliyorum|beklerim|buyrun|buyurun|serbest|d[uü][sş]|yaz(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?)?|l[uü]tfen|pls)(?:[^\p{L}\p{N}]|$)/iu,
         neden: 'DM çağrısı / daveti'
     },
     // 3. PM (Private Message) davetleri ("pm at", "pm atın", "pm bekliyorum", "pm açık", "pm gelin")
     {
-        regex: /(?:^|[^\p{L}\p{N}])pm(?:\s*(?:at|at[ıi]n|ats[ıi]n|atabilir|atabilirsiniz|gelin|yaz[ıi]n|bekliyorum|beklerim|a[cç][ıi]k|kutum)|'?(?:den|dan|e|ye|de|da))(?:[^\p{L}\p{N}]|$)/iu,
+        regex: /(?:^|[^\p{L}\p{N}])pm(?:\s*(?:at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?)?|gelin|yaz(?:[ıi]n[ıi]z?|[ıi]n)?|bekliyorum|beklerim|a[cç][ıi]k|kutum)|'?(?:den|dan|e|ye|de|da))(?:[^\p{L}\p{N}]|$)/iu,
         neden: 'PM (Özel Mesaj) çağrısı'
     },
-    // 4. "canı sıkılan dm", "canı sıkılan dme", "canı sıkılan mesaj", "canı sıkılan yazsın", "canı sıkılan gelsin"
+    // 4. "canı sıkılan dm", "canı sıkılan yazsın/yazabilir/yaz", "canı sıkılan mesaj", "canı sıkılan gelsin/ulaşsın/dertleşelim/sohbet/kimse var mı"
     {
-        regex: /can[ıi]\s*s[ıi]k[ıi]lan(?:\s*olan)?(?:\s*varsa)?(?:\s*biri(?:si)?(?:ni)?)?(?:\s*lar)?\s*(?:dm|dme|dm'e|mesaj|yazs[ıi]n|yazsin|gelsin|konu[sş]al[ıi]m|buyursun|ula[sş]s[ıi]n|eklesin|ses\s*versin|var\s*m[ıi])/iu,
+        regex: /(?:can[ıi]\s*s[ıi]k[ıi]lan(?:lar)?|cani\s*sikilan(?:lar)?)(?:\s+(?:olan|varsa|biri(?:si)?(?:ni)?|birileri(?:ni)?|kimse|herkes|herkesi|bana|[oö]zelden|[oö]zel|[oö]zele|yoruma|yorumlara|alta|l[uü]tfen)){0,3}\s+(?:dm|dme|dm'e|pm|[oö]zelden|[oö]zele|mesaj\s*(?:at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n(?:lar)?|abilir(?:siniz|sin)?)?|g[oö]nderin)?|yaz(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n(?:lar)?|abilir(?:siniz|sin)?)?|gelsin|gelin|gelebilir|gelsinler|konu[sş]al[ıi]m|konu[sş]abiliriz|konu[sş]mak|dertle[sş]elim|dertle[sş]ebiliriz|dertle[sş]mek|dertle[sş]ecek|tan[ıi][sş]al[ıi]m|tan[ıi][sş]abiliriz|tan[ıi][sş]mak|sohbet(?:\s*edelim|\s*edecek)?|buyursun|buyrun|ula[sş]s[ıi]n|ula[sş](?:[ıi]n[ıi]z?|[ıi]n)?|ula[sş]abilir(?:siniz|sin)?|eklesin|ekle(?:yin)?|ekleyebilir|ses\s*versin|ses\s*verin|var\s*m[ıi]|yok\s*mu|kimse\s*var\s*m[ıi]|kimse\s*yok\s*mu)/iu,
         neden: 'Canı sıkılan sohbet/DM çağrısı'
     },
-    // 5. "canım sıkıldı / sıkılıyor" + sohbet/mesaj arayışı
+    // 5. "canım sıkıldı / sıkılıyor / sıkıntıdan patladım" + sohbet/mesaj arayışı
     {
-        regex: /can[ıi]m\s*(?:[cç]ok\s*)?s[ıi]k[ıi]l(?:d[ıi]|[ıi]yor)\s*(?:dm|mesaj|yaz[ıi]n|konu[sş]al[ıi]m|dertle[sş]elim|sohbet|biriyle\s*konu[sş]|konu[sş]acak|dertle[sş]ecek)/iu,
+        regex: /(?:can[ıi]m\s*(?:[cç]ok\s*)?s[ıi]k[ıi]l(?:d[ıi]|[ıi]yor)|s[ıi]k[ıi]nt[ıi]dan\s*patlad[ıi]m)\s+(?:dm|dme|pm|[oö]zelden|[oö]zele|mesaj|yaz(?:[ıi]n[ıi]z?|[ıi]n|abilir(?:siniz|sin)?|abilir\s*misiniz)?|konu[sş]al[ıi]m|konu[sş]abiliriz|dertle[sş]elim|dertle[sş]ebiliriz|sohbet(?:\s*edelim)?|tan[ıi][sş]al[ıi]m|biri(?:si)?\s*yazs[ıi]n|birileri\s*yazs[ıi]n|biriyle\s*konu[sş]|konu[sş]acak|dertle[sş]ecek|sohbet\s*edecek|kimse\s*yok\s*mu|kimse\s*var\s*m[ıi])/iu,
         neden: 'Canım sıkıldı sohbet/mesaj çağrısı'
     },
     // 6. "çok sıkıldım yazın", "sıkıldım mesaj atın", "sıkıldım dm"
     {
-        regex: /(?:[cç]ok\s*)?s[ıi]k[ıi]ld[ıi]m\s+(?:dm|dme|mesaj|yaz[ıi]n|konu[sş]al[ıi]m|dertle[sş]elim|sohbete)/iu,
+        regex: /(?:[cç]ok\s*)?s[ıi]k[ıi]ld[ıi]m\s+(?:dm|dme|pm|[oö]zelden|[oö]zele|mesaj|yaz(?:[ıi]n[ıi]z?|[ıi]n|abilir(?:siniz|sin)?)?|konu[sş]al[ıi]m|dertle[sş]elim|tan[ıi][sş]al[ıi]m|sohbet|sohbete|biri\s*yazs[ıi]n|kimse\s*yok\s*mu)/iu,
         neden: 'Sıkıldım sohbet/mesaj çağrısı'
     },
-    // 7. "konuşmak isteyen mesaj atsın", "konuşmak isteyen yazsın", "sohbet etmek isteyen dm", "konuşmak isteyen var mı?"
+    // 7. "konuşmak isteyen mesaj atsın/yazsın", "sohbet etmek/isteyen", "dertleşmek isteyen", "tanışmak isteyen"
     {
-        regex: /(?:tan[ıi][sş]mak|konu[sş]mak|dertle[sş]mek|yaz[ıi][sş]mak|sohbet\s*etmek|muhabbet\s*etmek|arkada[sş]\s*olmak|vakit\s*ge[cç]irmek|kaynatmak)\s*(?:isteyen|isteyenler|arayan|arayanlar)(?:(?:\s*[\?!]+|\s*$)|(?:\s+(?:varsa|olursa|biri(?:si)?(?:ni)?|birileri(?:ni)?|olan|herkes|herkesi|bana|[oö]zelden|[oö]zel|l[uü]tfen)){0,3}(?:\s+(?:mesaj\s*(?:at[ıi]n?|ats[ıi]n|atabilir|atabilirsiniz|g[oö]nderin)?|yaz[ıi]n?|yazs[ıi]n|yazabilir|dm|gelsin|gelin|ula[sş][ıi]n?|ula[sş]s[ıi]n|eklesin|ekleyin|buyursun|buyrun|bekliyorum|beklerim|buraday[ıi]m|burday[ıi]m|buralarday[ıi]m|var\s*m[ıi]|[\?!]+|$)))/iu,
+        regex: /(?:tan[ıi][sş]mak|konu[sş]mak|dertle[sş]mek|yaz[ıi][sş]mak|sohbet\s*(?:etmek)?|muhabbet\s*(?:etmek)?|arkada[sş]\s*olmak|vakit\s*ge[cç]irmek|kaynatmak|kayna[sş]mak)\s*(?:isteyen|isteyenler|arayan|arayanlar)(?:(?:\s*[\?!]+|\s*$)|(?:\s+(?:varsa|olursa|biri(?:si)?(?:ni)?|birileri(?:ni)?|olan|herkes|herkesi|bana|[oö]zelden|[oö]zel|[oö]zele|yoruma|yorumlara|alta|l[uü]tfen)){0,3}(?:\s+(?:mesaj\s*(?:at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n(?:lar)?|abilir(?:siniz|sin)?)?|g[oö]nderin)?|yaz(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n(?:lar)?|abilir(?:siniz|sin)?)?|dm|pm|[oö]zelden|[oö]zele|gelsin|gelin|gelebilir|gelsinler|ula[sş][ıi]n?|ula[sş]s[ıi]n|ula[sş]abilir(?:siniz|sin)?|eklesin|ekle(?:yin)?|ekleyebilir|buyursun|buyrun|bekliyorum|beklerim|buraday[ıi]m|burday[ıi]m|buralarday[ıi]m|var\s*m[ıi]|yok\s*mu|[\?!]+|$)))/iu,
         neden: 'Tanışma / konuşma / dertleşme / sohbet çağrısı'
     },
     // 8. "konuşacak / sohbet edecek / dertleşecek biri var mı / arıyorum / kimse yok mu"
     {
-        regex: /(?:konu[sş]acak|sohbet\s*edecek|dertle[sş]ecek|tan[ıi][sş]acak|yaz[ıi][sş]acak|muhabbet\s*edecek)\s+(?:biri(?:si)?(?:ni|yle|le|ne|den)?|birileri(?:ni|yle)?|arkada[sş]|dost|kimse|k[ıi]z|bayan)?\s*(?:var\s*m[ıi]|yok\s*mu|ar[ıi]yorum|laz[ıi]m|bekliyorum)/iu,
+        regex: /(?:konu[sş]acak|sohbet\s*edecek|dertle[sş]ecek|tan[ıi][sş]acak|yaz[ıi][sş]acak|muhabbet\s*edecek)\s+(?:biri(?:si)?(?:ni|yle|le|ne|den)?|birileri(?:ni|yle)?|arkada[sş]|dost|kimse|k[ıi]z|bayan)?\s*(?:var\s*m[ıi]|yok\s*mu|ar[ıi]yorum|laz[ıi]m|bekliyorum|yazar\s*m[ıi])/iu,
         neden: 'Sohbet / konuşacak arkadaş arayışı'
     },
     // 9. "sohbete beklerim", "sohbete gelin", "muhabbete beklerim"
@@ -93,27 +105,27 @@ const DM_REGEXES = [
     },
     // 10. Karşılıklı teklif / soru: "konuşalım mı", "dertleşelim mi", "tanışalım mı", "sohbet edelim mi"
     {
-        regex: /(?:konu[sş]al[ıi]m\s*m[ıi]|dertle[sş]elim\s*m[ıi]|tan[ıi][sş]al[ıi]m\s*m[ıi]|sohbet\s*edelim\s*mi|yaz[ıi][sş]al[ıi]m\s*m[ıi]|kaynatal[ıi]m\s*m[ıi])/iu,
+        regex: /(?:konu[sş]al[ıi]m\s*m[ıi]|dertle[sş]elim\s*m[ıi]|tan[ıi][sş]al[ıi]m\s*m[ıi]|sohbet\s*edelim\s*mi|yaz[ıi][sş]al[ıi]m\s*m[ıi]|kaynatal[ıi]m\s*m[ıi]|kayna[sş]al[ıi]m\s*m[ıi])/iu,
         neden: 'Karşılıklı konuşma / tanışma teklifi'
     },
-    // 11. "mesaj atın konuşalım", "yazın tanışalım", "dm atın dertleşelim"
+    // 11. "mesaj atın konuşalım", "yazın tanışalım", "ekleyin dertleşelim", "ekle konuşalım", "dm atın konuşalım"
     {
-        regex: /(?:mesaj\s*at[ıi]n?|yaz[ıi]n?|dm\s*at[ıi]n?|gelin)\s+(?:konu[sş]al[ıi]m|dertle[sş]elim|tan[ıi][sş]al[ıi]m|sohbet\s*edelim|kaynatal[ıi]m)/iu,
+        regex: /(?:mesaj\s*at(?:[ıi]n[ıi]z?|[ıi]n)?|yaz(?:[ıi]n[ıi]z?|[ıi]n)?|dm\s*at(?:[ıi]n[ıi]z?|[ıi]n)?|ekle(?:yin)?|gelin)\s+(?:konu[sş]al[ıi]m|dertle[sş]elim|tan[ıi][sş]al[ıi]m|sohbet\s*edelim|kaynatal[ıi]m|kayna[sş]al[ıi]m)/iu,
         neden: 'Yazın / mesaj atın konuşalım çağrısı'
     },
-    // 12. "özelden yazın", "özelden konuşalım", "özelden ulaşın", "özele gelin"
+    // 12. "özelden yazın", "özelden konuşalım", "özelden konuşabilir miyiz", "özele gelin", "özele geçelim"
     {
-        regex: /(?:[oö]zelden|[oö]zele)\s*(?:yaz[ıi]n|yaz|yazsin|yazs[ıi]n|mesaj|konu[sş]al[ıi]m|ula[sş][ıi]n|ula[sş]|bekliyorum|beklerim|yazabilirsiniz|gelin)/iu,
+        regex: /(?:[oö]zelden|[oö]zele)\s*(?:yaz(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?)?|mesaj|konu[sş]al[ıi]m|konu[sş]abiliriz|konu[sş]abilir\s*miyiz|ula[sş][ıi]n?|ula[sş]s[ıi]n|ula[sş]abilir(?:siniz|sin)?|bekliyorum|beklerim|gelin|ge[cç]elim)/iu,
         neden: 'Özelden yazışma / mesaj daveti'
     },
     // 13. "özel mesaj atın", "özel mesaj bekliyorum", "özel mesaj atabilirsiniz"
     {
-        regex: /[oö]zel\s*mesaj\s*(?:at[ıi]n|at|ats[ıi]n|atabilir|atabilirsiniz|bekliyorum|beklerim|g[oö]nderin|yollay[ıi]n|yaz[ıi]n)/iu,
+        regex: /[oö]zel\s*mesaj\s*(?:at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?|ar\s*m[ıi]s[ıi]n[ıi]z?)?|bekliyorum|beklerim|g[oö]nderin|yollay[ıi]n|yaz(?:[ıi]n[ıi]z?|[ıi]n)?)/iu,
         neden: 'Özel mesaj talebi'
     },
-    // 14. "mesaj atın", "mesaj atabilirsiniz", "bana mesaj atın", "mesaj bekliyorum"
+    // 14. "mesaj atın", "mesaj atabilirsiniz", "mesaj atabilirsin", "bana mesaj atın", "mesaj bekliyorum"
     {
-        regex: /(?:bana\s+)?mesaj\s*(?:at[ıi]n|at|ats[ıi]n|atabilirsiniz|ata\s*bilirsiniz|atabilir|atar\s*m[ıi]s[ıi]n[ıi]z?|bekliyorum|beklerim|b[ıi]rak[ıi]n|g[oö]nderin|yollay[ıi]n)/iu,
+        regex: /(?:bana\s+)?mesaj\s*(?:at(?:[ıi]n[ıi]z?|[ıi]n|s[ıi]n|abilir(?:siniz|sin)?|ar\s*m[ıi]s[ıi]n[ıi]z?)?|ata\s*bilir(?:siniz|sin)?|bekliyorum|beklerim|b[ıi]rak[ıi]n|g[oö]nderin|yollay[ıi]n)/iu,
         neden: 'Mesaj atın çağrısı'
     },
     // 15. "mesaj kutum açık"
@@ -123,12 +135,12 @@ const DM_REGEXES = [
     },
     // 16. "bana özelden yazın"
     {
-        regex: /bana\s+(?:[oö]zelden|[oö]zel)\s+(?:yaz[ıi]n|yaz|mesaj|ula[sş][ıi]n)/iu,
+        regex: /bana\s+(?:[oö]zelden|[oö]zel)\s+(?:yaz(?:[ıi]n[ıi]z?|[ıi]n)?|mesaj|ula[sş][ıi]n?)/iu,
         neden: 'Bana özelden yaz çağrısı'
     },
-    // 17. "bana yazın / bana ulaşın"
+    // 17. "bana yaz / bana ulaş / bana yazabilirsiniz / bana yazabilirsin"
     {
-        regex: /bana\s+(?:ula[sş][ıi]n|yaz[ıi]n|yazabilirsiniz)\b/iu,
+        regex: /\bbana\s+(?:ula[sş](?:[ıi]n[ıi]z?|abilir(?:siniz|sin)?)?|yaz(?:[ıi]n[ıi]z?|abilir(?:siniz|sin)?)?)\b/iu,
         neden: 'Bana yazın / ulaşın çağrısı'
     },
     // 18. "mesajlarınızı bekliyorum / mesajlarınızı beklerim"
@@ -193,22 +205,22 @@ const YETISKIN_REGEXES = [
         regex: /\b(?:escort|eskort|escorta|escortlar|mas[oö]z|mutlu\s*son\s*masaj|masaj\s*salonu\s*mutlu\s*son|travesti\s*escort)\b/iu,
         neden: 'Eskort / masaj ilanı'
     },
-    // 4. Edebi kitap alıntılarındaki anatomik cinsel organ isimleri
+    // 4. Edebi kitap alıntılarındaki anatomik cinsel organ isimleri (1. ve 3. şahıs iyelik ekleriyle)
     {
-        regex: /\b(?:vajina|vajinas[ıi]|vajinas[ıi]na|vajinas[ıi]nda|vajinas[ıi]ndan|vajinaya|vajinay[ıi]|vagina)\b/iu,
+        regex: /\b(?:vajina|vajinam|vajinama|vajinamda|vajinamdan|vajinam[ıi]|vajinas[ıi]|vajinas[ıi]na|vajinas[ıi]nda|vajinas[ıi]ndan|vajinaya|vajinay[ıi]|vagina)\b/iu,
         neden: 'Vajina ifadesi (+18 erotik alıntı)'
     },
     {
-        regex: /\b(?:penis|penisi|penisine|penisinde|penisinden|penise|penisiyle)\b/iu,
+        regex: /\b(?:penis|penisim|penisime|penisimde|penisimden|penisimi|penisi|penisine|penisinde|penisinden|penise|penisiyle)\b/iu,
         neden: 'Penis ifadesi (+18 erotik alıntı)'
     },
     {
-        regex: /\b(?:klitoris|klitorisi|klitorisine|klitorisini|klitorisiyle)\b/iu,
+        regex: /\b(?:klitoris|klitorisim|klitorisime|klitorisimi|klitorisi|klitorisine|klitorisini|klitorisiyle)\b/iu,
         neden: 'Klitoris ifadesi (+18 erotik alıntı)'
     },
     // 5. Açık müstehcen organ argosu
     {
-        regex: /\b(?:amc[ıi]k|amc[ıi][gğ][ıi]|amc[ıi][gğ][ıi]na|amc[ıi][gğ][ıi]nda|amc[ıi][gğ][ıi]ndan|yarrak|yarak|yara[gğ][ıi]m|yara[gğ][ıi]|yara[gğ][ıi]na|yara[gğ][ıi]nda|yara[gğ][ıi]ndan|da[sş][sş]ak|ta[sş]ak|ta[sş][sş]ak)\b/iu,
+        regex: /\b(?:amc[ıi]k|amc[ıi][gğ][ıi]m|amc[ıi][gğ][ıi]|amc[ıi][gğ][ıi]na|amc[ıi][gğ][ıi]nda|amc[ıi][gğ][ıi]ndan|yarrak|yarak|yara[gğ][ıi]m|yara[gğ][ıi]|yara[gğ][ıi]na|yara[gğ][ıi]nda|yara[gğ][ıi]ndan|da[sş][sş]ak|ta[sş]ak|ta[sş][sş]ak)\b/iu,
         neden: 'Açık müstehcen organ argosu'
     },
     {
@@ -216,7 +228,7 @@ const YETISKIN_REGEXES = [
         neden: 'Müstehcen kalça/göt argosu'
     },
     {
-        regex: /\b(?:am[ıi]n[ıi]|am[ıi]na|am[ıi]nda|am[ıi]ndan|[ıi]slak\s*am|dar\s*am|sulu\s*am)\b/iu,
+        regex: /\b(?:am[ıi]n[ıi]|am[ıi]ma|am[ıi]na|am[ıi]nda|am[ıi]ndan|[ıi]slak\s*am|dar\s*am|sulu\s*am)\b/iu,
         neden: 'Müstehcen organ kullanımı'
     },
     {
@@ -243,57 +255,57 @@ const YETISKIN_REGEXES = [
     },
     // 8. Boşalma, meni, sperm, döl ("boş yere" veya "dolu" gibi edebi kelimelerle çakışmaz)
     {
-        regex: /\b(?:bo[sş]ald[ıi]m?|bo[sş]al[ıi]rken|bo[sş]almak\s*(?:istiyorum|istedi|[uü]zereydi)|bo[sş]alt\s*beni|i[cç]ine\s*bo[sş]al(?:d[ıi]|mak|d[ıi]m)?|a[gğ]z[ıi]na\s*bo[sş]al(?:d[ıi]|mak)?)\b/iu,
+        regex: /\b(?:bo[sş]ald[ıi](?:m|k)?|bo[sş]al[ıi]rken|bo[sş]almak\s*(?:istiyorum|istedi|[uü]zereydi)|bo[sş]alt\s*beni|(?:i[cç]ime|i[cç]ine|a[gğ]z[ıi]ma|a[gğ]z[ıi]na|[uü]st[uü]me|[uü]st[uü]ne)\s*bo[sş]al(?:d[ıi](?:m)?|mak)?)\b/iu,
         neden: 'Cinsel boşalma ifadesi'
     },
     {
-        regex: /\b(?:meni|menisini|sperm|d[oö]l|dölü|d[oö]l[uü]n[uü]|d[oö]lleme|zevk\s*suyu|zevk\s*sular[ıi])\b/iu,
+        regex: /\b(?:meni|menim|menisini|sperm|spermi|spermini|d[oö]l|dölü|d[oö]l[uü]n[uü]|d[oö]l[uü]m|d[oö]lleme|zevk\s*suyu|zevk\s*sular[ıi]|zevk\s*suyum|zevk\s*suyunu)\b/iu,
         neden: 'Meni / döl / zevk suyu ifadesi (+18)'
     },
-    // 9. Orgazm ifadeleri
+    // 9. Orgazm ifadeleri (1. ve 3. şahıs)
     {
-        regex: /\b(?:orgazm|orgazma\s*(?:ula[sş]t[ıi]|ula[sş]an|ula[sş]t[ıi]lar)|orgazm\s*(?:oldu|oluyor|an[ıi]nda|[cç][ıi][gğ]l[ıi][gğ][ıi])|[cç]oklu\s*orgazm)\b/iu,
+        regex: /\b(?:orgazm|orgazma\s*(?:ula[sş]t[ıi](?:m|k|lar)?|ula[sş]an)|orgazm\s*(?:oldu(?:m|k)?|oluyor|an[ıi]nda|[cç][ıi][gğ]l[ıi][gğ][ıi])|[cç]oklu\s*orgazm)\b/iu,
         neden: 'Orgazm ifadesi (+18 erotik alıntı)'
     },
-    // 10. Erotik kitap alıntılarındaki temas ve birleşme betimlemeleri
+    // 10. Erotik kitap alıntılarındaki temas ve birleşme betimlemeleri (1. ve 3. şahıs)
     {
-        // "bacaklarını araladı", "bacaklarını ayırdı", "bacaklarının arasına dokundu/girdi", "bacaklarının arası ıslanmıştı"
-        regex: /(?:bacaklar[ıi]n[ıi]\s+(?:aralad[ıi]|ay[ıi]rd[ıi]|a[cç]t[ıi]|ikiye\s+ay[ıi]rd[ıi])|bacaklar[ıi]n[ıi]n\s+aras[ıi](?:na|n[ıi]|nda)?\s+(?:dokundu|ok[sş]ad[ıi]|kayd[ıi]|[ıi]slanm[ıi][sş]t[ıi]|girdi))/iu,
+        // "bacaklarını/bacaklarımı araladı/ayırdı/açtı", "bacaklarının/bacaklarımın arasına dokundu/girdi/ıslanmıştı"
+        regex: /(?:bacaklar[ıi](?:n[ıi]|m[ıi])\s+(?:aralad[ıi]|ay[ıi]rd[ıi]|a[cç]t[ıi]|ikiye\s+ay[ıi]rd[ıi]|ikiye\s+aralad[ıi])|bacaklar[ıi](?:n[ıi]n|m[ıi]n)\s+aras[ıi](?:na|n[ıi]|nda)?\s+(?:dokundu|ok[sş]ad[ıi]|kayd[ıi]|[ıi]slanm[ıi][sş]t[ıi]|s[ıi]r[ıi]ls[ıi]klam|s[ıi]ms[ıi]cakt[ıi]|girdi|soktu|yerle[sş]ti))/iu,
         neden: 'Erotik kitap alıntısı (bacak arası / genital temas)'
     },
     {
-        // "içine sertçe girdi", "içinde kaydı", "içine kökledi", "erkekliğini içine aldı", "içine soktu"
-        regex: /(?:i[cç]ine\s+(?:sert[cç]e\s+)?(?:girdi|kayd[ıi]|soktu|k[oö]kledi)|erkekli[gğ]ini\s+i[cç]ine\s+ald[ıi]|i[cç]inde\s+kayd[ıi])/iu,
+        // "içine/içime sertçe/yavaşça/derince girdi/kaydı/soktu", "erkekliğini içine/içime/kadınlığıma aldı/itti/sürttü"
+        regex: /(?:(?:i[cç]ine|i[cç]ime|i[cç]inde|i[cç]imde)\s+(?:(?:sert[cç]e|yava[sş][cç]a|derince|tamamen)\s+)?(?:girdi|kayd[ıi]|soktu|k[oö]kledi|hareket\s*etti|hareket\s*etmeye)|erkekli[gğ]ini\s+(?:i[cç]ime|i[cç]ine|kad[ıi]nl[ıi][gğ][ıi]ma|kad[ıi]nl[ıi][gğ][ıi]na|aras[ıi]na)\s+(?:ald[ıi]|ald[ıi]m|soktu|itti|s[uü]rtt[uü]|bast[ıi]rd[ıi]))/iu,
         neden: 'Erotik kitap alıntısı (cinsel penetrasyon betimlemesi)'
     },
     {
-        // "meme uçlarını okşadı", "göğüs uçları sertleşmişti", "memelerini sıktı", "meme ucunu emdi"
-        regex: /(?:(?:g[oö][gğ][uü]s|meme)\s*u[cç](?:u|lar[ıi])(?:n[ıi]|na)?(?:\s+[a-zçğıöşü]+){0,5}\s*(?:sertle[sş]|emdi|[oö]pt[uü]|ok[sş]ad[ıi]|avu[cç]lad[ıi]|ald[ıi]|s[ıi]kt[ıi]|tuttu)|memelerini\s+(?:avu[cç]lad[ıi]|s[ıi]kt[ıi]|ok[sş]ad[ıi]|emdi))/iu,
+        // "meme uçlarını/uçlarımı okşadı/emdi", "göğüs uçları/uçlarım sertleşmişti", "memelerini/memelerimi avuçladı/sıktı/emdi"
+        regex: /(?:(?:g[oö][gğ][uü]s|meme)\s*u[cç](?:u|lar[ıi]|um|lar[ıi]m)(?:n[ıi]|na|m[ıi]|ma)?(?:\s+[a-zçğıöşü]+){0,5}\s*(?:sertle[sş]|emdi|[oö]pt[uü]|ok[sş]ad[ıi]|avu[cç]lad[ıi]|ald[ıi]|s[ıi]kt[ıi]|tuttu|dilledi|yalad[ıi])|(?:memelerini|memelerimi|g[oö][gğ][uü]slerimi|g[oö][gğ][uü]slerini)\s+(?:avu[cç]lad[ıi]|s[ıi]kt[ıi]|ok[sş]ad[ıi]|emdi|[oö]pt[uü]))/iu,
         neden: 'Erotik kitap alıntısı (göğüs/meme uyarımı)'
     },
     {
-        // "kalçalarını kavradı", "kalçasını sıktı", "arkadan sertçe"
-        regex: /(?:kal[cç]alar[ıi]n[ıi]\s+(?:kavrad[ıi]|s[ıi]kt[ıi]|avu[cç]lad[ıi]|ok[sş]ad[ıi]|tutup)|arkadan\s+sert[cç]e\s+girdi)/iu,
+        // "kalçalarını/kalçamı kavradı/sıktı", "arkadan sertçe girdi"
+        regex: /(?:kal[cç]a(?:s[ıi](?:n[ıi])?|m(?:[ıi])?|lar[ıi](?:n[ıi])?|lar[ıi]m(?:[ıi])?)\s+(?:kavrad[ıi]|s[ıi]kt[ıi]|avu[cç]lad[ıi]|ok[sş]ad[ıi]|tutup|tokatlad[ıi]|tokatlay[ıi]p|[sş]aplak)|arkadan\s+sert[cç]e\s+girdi)/iu,
         neden: 'Erotik kitap alıntısı (kalça tutuşu / cinsel eylem)'
     },
     {
-        // "zevkten inledi", "zevk çığlıkları", "inlemeleri odayı doldurdu", "zevk dolu inleme"
-        regex: /(?:zevkten\s+(?:inledi|inleyerek|k[ıi]vrand[ıi]|hayk[ıi]rd[ıi]|[cç][ıi]ld[ıi]rd[ıi]|[cç][ıi][gğ]l[ıi]k)|inlemeleri\s+oday[ıi]|zevk\s*(?:[cç][ıi][gğ]l[ıi]klar[ıi]|dolu\s*inleme))/iu,
+        // "zevkten inledi/inledim", "inlemeleri/inlemelerim odayı doldurdu", "zevk inlemeleri/iniltileri"
+        regex: /(?:zevkten\s+(?:inledi(?:m)?|inleyerek|k[ıi]vrand[ıi](?:m)?|hayk[ıi]rd[ıi](?:m)?|[cç][ıi]ld[ıi]rd[ıi](?:m)?|[cç][ıi][gğ]l[ıi]k)|inleme(?:leri|lerim|lerimiz)\s+(?:oday[ıi]|havay[ıi])\s*(?:doldurdu|inletti)|zevk\s*(?:[cç][ıi][gğ]l[ıi]klar[ıi]|dolu\s*inleme|inlemeleri|iniltileri|iniltisi))/iu,
         neden: 'Erotik kitap alıntısı (zevk / cinsel inleme)'
     },
     {
-        // "sertleşen erkekliği", "sertleşen penisi", "ereksiyon hali", "ıslanmış kadınlığı"
-        regex: /(?:sertle[sş]en\s+(?:erkekli[gğ]i|penisi|aleti)|ereksiyon\s+hali|[ıi]slanm[ıi][sş]\s+kad[ıi]nl[ıi][gğ][ıi]|[ıi]slak\s+kad[ıi]nl[ıi][gğ][ıi])/iu,
-        neden: 'Erotik kitap alıntısı (cinsel uyarılma / ereksiyon)'
+        // "sertleşen erkekliği/aleti", "ıslanmış kadınlığı/kadınlığım", "kadınlığıma girdi/dokundu"
+        regex: /(?:sertle[sş]en\s+(?:erkekli[gğ]i|erkekli[gğ]im|penisi|penisim|aleti|aletim)|ereksiyon\s+hali|[ıi]slanm[ıi][sş]\s+kad[ıi]nl[ıi][gğ][ıi]m?|[ıi]slak\s+kad[ıi]nl[ıi][gğ][ıi]m?|kad[ıi]nl[ıi][gğ][ıi](?:na|ma)\s+(?:girdi|dokundu|kayd[ıi]|s[uü]rtt[uü]))/iu,
+        neden: 'Erotik kitap alıntısı (cinsel uyarılma / genital ıslaklık)'
     },
     {
-        // "çırılçıplak soyunup yatağa", "çırılçıplak uzandılar", "üzerindekileri parçaladı"
-        regex: /(?:[cç][ıi]r[ıi]l[cç][ıi]plak\s+(?:soyunup\s+yata[gğ]a|yata[gğ]a\s+uzand[ıi]|uzand[ıi]lar|[uü]zerine|yata[gğ]a)|[uü]zerindekileri\s+(?:y[ıi]rtt[ıi]|f[ıi]rlatt[ıi])\s+ve\s+yata[gğ]a)/iu,
-        neden: 'Erotik kitap alıntısı (yatakta çıplaklık)'
+        // "iç çamaşırını/külodumu sıyırdı/yırttı/çıkardı", "çırılçıplak soyunup yatağa/üzerime"
+        regex: /(?:(?:i[cç]\s*[cç]ama[sş][ıi]r(?:[ıi]n[ıi]|[ıi]m[ıi]|lar[ıi]n[ıi]|lar[ıi]m[ıi])|k[uü]lot(?:unu|umu)|k[uü]lod(?:unu|umu))\s+(?:[cç][ıi]kard[ıi]|s[ıi]y[ıi]rd[ıi]|y[ıi]rtt[ıi]|f[ıi]rlatt[ıi]|indirdi|kenara\s*[cç]ekti)|[cç][ıi]r[ıi]l[cç][ıi]plak\s+(?:soyunup\s+yata[gğ]a|yata[gğ]a\s+uzand[ıi]|uzand[ıi]lar|uzand[ıi]m|[uü]zerime|[uü]zerine|yata[gğ]a)|(?:[uü]zerindekileri|[uü]zerimdekileri)\s+(?:y[ıi]rtt[ıi]|f[ıi]rlatt[ıi]|[cç][ıi]kard[ıi])\s+ve\s+yata[gğ]a)/iu,
+        neden: 'Erotik kitap alıntısı (iç çamaşırı / çıplaklık)'
     },
     {
-        // "şehvetle seviştiler", "sevişme sahnesi", "sevişirken aldıkları haz", "çılgınca seviş", "sevişelim"
-        regex: /(?:[sş]ehvetle\s+sevi[sş]|sevi[sş]me\s+sahnesi|sevi[sş]irken\s+ald[ıi]klar[ıi]\s+haz|[cç][ıi]lg[ıi]nca\s+sevi[sş]|sevi[sş]elim|sevi[sş]mek\s*isteyen|benimle\s*sevi[sş]|sevi[sş]mek\s*istiyorum)/iu,
+        // "şehvetle/tutkuyla/ihtirasla seviştiler/seviştik", "sevişmeye başladık/başladılar", "sevişelim"
+        regex: /(?:(?:[sş]ehvetle|tutkuyla|ihtirasla|[cç][ıi]lg[ıi]nca|delice)\s+sevi[sş]|sevi[sş]me\s+sahnesi|sevi[sş]irken\s+ald[ıi]klar[ıi]\s+haz|sevi[sş]meye\s+ba[sş]lad[ıi](?:k|lar)?|sabaha\s+kadar\s+sevi[sş]|sevi[sş]elim|sevi[sş]mek\s*isteyen|benimle\s*sevi[sş]|sevi[sş]mek\s*istiyorum)/iu,
         neden: 'Erotik sevişme betimlemesi / sevişme teklifi'
     },
     // 11. Cinsel ilişki teklifleri & cinsel içerik
@@ -302,7 +314,7 @@ const YETISKIN_REGEXES = [
         neden: 'Cinsel ilişki / seks teklifi'
     },
     {
-        regex: /\bcinsel\s+(?:ili[sş]ki|birle[sş]me|organ|fantazi|fantezi|partner|sohbet|a[cç]l[ıi]k|tatmin)\b/iu,
+        regex: /\bcinsel\s+(?:ili[sş]ki|birle[sş]me|organ|fantazi|fantezi|partner|sohbet|a[cç]l[ıi]k|tatmin|arzu|istek|d[uü]rt[uü]|haz|[sş]ehvet)\b/iu,
         neden: 'Açık cinsel içerik (cinsel ilişki/organ vb.)'
     },
     {
@@ -359,39 +371,51 @@ function icerikUygunMu(metin) {
     const compactNorm = compactSpaced(norm);
     const compactAscii = compactSpaced(ascii);
 
+    const sepNorm = normalizeSeparators(norm);
+    const sepAscii = normalizeSeparators(ascii);
+    const compactSepNorm = compactSpaced(sepNorm);
+    const compactSepAscii = compactSpaced(sepAscii);
+
+    const targets = [
+        norm,
+        ascii,
+        compactNorm,
+        compactAscii,
+        sepNorm,
+        sepAscii,
+        compactSepNorm,
+        compactSepAscii
+    ];
+
     // 1. Yetişkin / +18 / Müstehcen / Erotik Alıntı Denetimi (Öncelikli)
     for (const item of YETISKIN_REGEXES) {
-        let match = norm.match(item.regex) ||
-                    ascii.match(item.regex) ||
-                    compactNorm.match(item.regex) ||
-                    compactAscii.match(item.regex);
-
-        if (match) {
-            return {
-                uygun: false,
-                kategori: 'yetiskin_18',
-                kategoriAd: 'Yetişkin / +18 İçerik',
-                neden: item.neden,
-                eslesen: match[0].trim()
-            };
+        for (const target of targets) {
+            const match = target.match(item.regex);
+            if (match) {
+                return {
+                    uygun: false,
+                    kategori: 'yetiskin_18',
+                    kategoriAd: 'Yetişkin / +18 İçerik',
+                    neden: item.neden,
+                    eslesen: match[0].trim()
+                };
+            }
         }
     }
 
     // 2. DM / Mesaj / Sohbet Daveti Denetimi
     for (const item of DM_REGEXES) {
-        let match = norm.match(item.regex) ||
-                    ascii.match(item.regex) ||
-                    compactNorm.match(item.regex) ||
-                    compactAscii.match(item.regex);
-
-        if (match) {
-            return {
-                uygun: false,
-                kategori: 'dm_sohbet',
-                kategoriAd: 'DM / Sohbet Daveti',
-                neden: item.neden,
-                eslesen: match[0].trim()
-            };
+        for (const target of targets) {
+            const match = target.match(item.regex);
+            if (match) {
+                return {
+                    uygun: false,
+                    kategori: 'dm_sohbet',
+                    kategoriAd: 'DM / Sohbet Daveti',
+                    neden: item.neden,
+                    eslesen: match[0].trim()
+                };
+            }
         }
     }
 
@@ -401,6 +425,7 @@ function icerikUygunMu(metin) {
 module.exports = {
     normalizeText,
     foldToAscii,
+    normalizeSeparators,
     compactSpaced,
     icerikUygunMu,
     DM_REGEXES,
